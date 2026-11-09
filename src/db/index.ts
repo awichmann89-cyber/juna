@@ -3,6 +3,7 @@ import { attachDatabasePool } from "@vercel/functions";
 import { sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { normalizeConnectionString } from "./connection-string";
 import * as schema from "./schema";
 
 export type Db = NodePgDatabase<typeof schema>;
@@ -13,7 +14,11 @@ const globalForDb = globalThis as unknown as { junaPool?: Pool };
 function createPool() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL fehlt (siehe .env.example).");
-  const pool = new Pool({ connectionString, max: 5, idleTimeoutMillis: 10_000 });
+  const pool = new Pool({
+    connectionString: normalizeConnectionString(connectionString),
+    max: 5,
+    idleTimeoutMillis: 10_000,
+  });
   // Vercel Fluid Compute: Pool sauber schließen, wenn die Instanz suspendiert wird
   attachDatabasePool(pool);
   return pool;

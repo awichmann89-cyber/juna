@@ -32,6 +32,8 @@ Der vollständige Projektplan liegt im claude.ai-Projekt „juna“ (`projektpla
    npm run db:migrate
    ```
 
+   Auf Vercel passiert das automatisch bei jedem Deployment (siehe [Datenbank-Änderungen](#datenbank-änderungen)).
+
    Die Migration legt u. a. die Rolle `juna_app` an. Die App verbindet sich als Owner (`neondb_owner`) und wechselt für alle Zugriffe im Namen eines Users per `set local role juna_app` in den RLS-Kontext.
 
 Tipp: Für Preview-Deployments und Tests eigene **Neon-Branches** verwenden (die Vercel-Integration von Neon kann pro Preview automatisch einen Branch anlegen).
@@ -68,6 +70,20 @@ npm run dev        # http://localhost:3000
 npm run lint
 npm run typecheck
 ```
+
+## Datenbank-Änderungen
+
+Migrationen laufen **automatisch bei jedem Push**: `vercel.json` setzt den Build-Befehl auf `npm run db:migrate && npm run build`. Schlägt eine Migration fehl, bricht der Build ab und die bisherige Version bleibt live.
+
+- Ziel ist die Datenbank aus den Umgebungsvariablen der jeweiligen Vercel-Umgebung (`DATABASE_URL_UNPOOLED`, sonst `DATABASE_URL`):
+  - **Production** → Produktions-Branch in Neon
+  - **Preview** → mit der Neon-Integration ein eigener Branch pro Preview-Deployment; ohne Integration die Preview-Variablen (dafür einen separaten Neon-Branch `dev` hinterlegen, **nicht** Production)
+- Variablen müssen in Vercel für *Production* und *Preview* gesetzt sein (beim Build verfügbar – bei normalen Env-Variablen der Fall).
+- Neue Änderung = **neue Datei** `db/migrations/000N_beschreibung.sql`. Bereits eingespielte Dateien nie ändern – der Runner erkennt das per Prüfsumme und bricht ab.
+- Migrationen **abwärtskompatibel** schreiben: Während des Builds läuft noch die alte Version gegen dieselbe Datenbank. Also erst Spalten/Tabellen hinzufügen, Entfernen erst in einer späteren Migration.
+- Parallele Builds werden über einen Postgres-Advisory-Lock serialisiert.
+- Stand prüfen: `select * from _migrations;` im Neon-SQL-Editor.
+- Bei neuen Tabellen immer `org_id`, RLS-Policies und Grants für `juna_app` mitliefern und `src/db/schema.ts` nachziehen.
 
 ## Tests
 

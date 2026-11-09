@@ -1,0 +1,2 @@
+# SQL-Migrationen immer mit LF (Prüfsummen im Migrations-Runner)
+*.sql text eol=lf
