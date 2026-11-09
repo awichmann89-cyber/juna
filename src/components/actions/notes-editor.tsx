@@ -238,7 +238,7 @@ export function EditorWithAutosave({
           </button>
         </div>
       )}
-      <div className="juna-editor -mx-3 min-h-64 rounded-xl sm:-mx-6">
+      <div className="juna-editor -mx-2 min-h-64 rounded-xl sm:-mx-3">
         <BlockNoteView
           editor={editor}
           theme={dark ? darkTheme : lightTheme}
