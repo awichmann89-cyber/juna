@@ -22,6 +22,8 @@ export const env = {
     return process.env.RESEND_API_KEY;
   },
   get mailFrom() {
-    return process.env.MAIL_FROM ?? "juna <noreply@juna.app>";
+    // Anführungszeichen aus .env-Gewohnheit tolerieren: Vercel übernimmt sie sonst wörtlich
+    const raw = (process.env.MAIL_FROM ?? "").trim().replace(/^(['"])(.*)\1$/, "$2").trim();
+    return raw || "juna <noreply@juna.app>";
   },
 };
