@@ -8,6 +8,10 @@ import { requireSuperadmin } from "@/lib/auth";
 import { and, count, desc, isNotNull, ne } from "drizzle-orm";
 import { schema, withUser } from "@/db";
 import { formatDate } from "@/lib/utils";
+import { cookies } from "next/headers";
+import { ManualLink } from "@/components/manual-link";
+import { mailEnabled } from "@/lib/mail";
+import { INVITE_FLASH_COOKIE } from "./flash";
 import { DecisionForm } from "./decision-form";
 
 export const metadata: Metadata = { title: "Plattform" };
@@ -16,6 +20,7 @@ async function Platform({ searchParams }: { searchParams: PageProps<"/admin">["s
   const sp = await searchParams;
   const str = (v: string | string[] | undefined) => (typeof v === "string" ? v : "");
   const result = str(sp.ergebnis);
+  const inviteLink = result === "freigegeben" ? (await cookies()).get(INVITE_FLASH_COOKIE)?.value : undefined;
   const me = await requireSuperadmin();
   // RLS: Superadmin darf Anträge und alle Organisationen lesen
   const { apps, orgs, counts } = await withUser(me.id, async (tx) => ({
@@ -40,6 +45,13 @@ async function Platform({ searchParams }: { searchParams: PageProps<"/admin">["s
       {result === "freigegeben" && (
         <Alert tone="success">
           „{str(sp.org)}“ ist freigeschaltet. {str(sp.kontakt)} wurde als Admin eingeladen.
+        </Alert>
+      )}
+      {inviteLink && <ManualLink url={inviteLink} label="Einladungslink für die Kontaktperson (10 Min. hier sichtbar)" />}
+      {!mailEnabled() && !inviteLink && (
+        <Alert tone="info">
+          Mailversand ist nicht eingerichtet (RESEND_API_KEY fehlt). Neue Anträge erscheinen nur hier, Einladungslinks werden
+          nach der Freigabe angezeigt.
         </Alert>
       )}
       {result === "abgelehnt" && <Alert tone="info">Antrag „{str(sp.org)}“ wurde abgelehnt.</Alert>}
@@ -86,7 +98,7 @@ async function Platform({ searchParams }: { searchParams: PageProps<"/admin">["s
                     <div className="flex-1">
                       <div className="font-bold">{o.name}</div>
                       <div className="text-sm text-muted">
-                        {memberCount.get(o.id) ?? 0} Mitglieder · seit {formatDate(o.createdAt)}
+                        {memberCount.get(o.id) ?? 0} {(memberCount.get(o.id) ?? 0) === 1 ? "Mitglied" : "Mitglieder"} · seit {formatDate(o.createdAt)}
                       </div>
                     </div>
                     {o.status !== "active" && <Badge tone="warning">Gesperrt</Badge>}

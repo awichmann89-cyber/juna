@@ -33,10 +33,11 @@ async function Members() {
   const members = rows.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] [&>*]:min-w-0">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{members.filter((m) => m.status !== "deactivated").length} Mitglieder</CardTitle>
+          <CardTitle className="text-base">{members.filter((m) => m.status !== "deactivated").length}{" "}
+            {members.filter((m) => m.status !== "deactivated").length === 1 ? "Mitglied" : "Mitglieder"}</CardTitle>
         </CardHeader>
         <CardContent className="px-2 pb-2">
           <ul className="divide-y divide-border">

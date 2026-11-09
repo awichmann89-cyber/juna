@@ -64,7 +64,9 @@ async function Dashboard() {
                 <Users className="size-5" aria-hidden />
               </span>
               <div className="flex-1">
-                <div className="font-bold">{members} Mitglieder</div>
+                <div className="font-bold">
+                  {members} {members === 1 ? "Mitglied" : "Mitglieder"}
+                </div>
                 <div className="text-sm text-muted">
                   {user.role === "admin" ? "Mitglieder einladen und verwalten" : "Deine Einstellungen"}
                 </div>

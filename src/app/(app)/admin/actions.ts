@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { adminDb, schema } from "@/db";
 import { requireSuperadmin } from "@/lib/auth";
 import { InviteError, inviteUser } from "@/lib/invitations";
-import { sendMail } from "@/lib/mail";
+import { mailEnabled, sendMail } from "@/lib/mail";
+import { INVITE_FLASH_COOKIE } from "./flash";
 
 export type AdminState = { ok?: string; error?: string };
 
@@ -46,8 +48,9 @@ export async function decideApplication(_prev: AdminState, formData: FormData): 
     .values({ name: app.orgName })
     .returning({ id: schema.organizations.id, name: schema.organizations.name });
 
+  let url: string;
   try {
-    await inviteUser({ email: app.contactEmail, displayName: app.contactName, orgId: org.id, role: "admin" });
+    ({ url } = await inviteUser({ email: app.contactEmail, displayName: app.contactName, orgId: org.id, role: "admin" }));
   } catch (e) {
     await db.delete(schema.organizations).where(eq(schema.organizations.id, org.id));
     if (!(e instanceof InviteError)) console.error("[admin:approve]", e);
@@ -59,6 +62,15 @@ export async function decideApplication(_prev: AdminState, formData: FormData): 
     .set({ status: "approved", organizationId: org.id, reviewedBy: superadmin.id, reviewedAt: new Date(), reviewNote: note })
     .where(eq(apps.id, app.id));
 
+  if (!mailEnabled()) {
+    (await cookies()).set(INVITE_FLASH_COOKIE, url, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/admin",
+      maxAge: 10 * 60,
+    });
+  }
   revalidatePath("/admin");
   redirect(`/admin?${new URLSearchParams({ ergebnis: "freigegeben", org: org.name, kontakt: app.contactName })}`);
 }

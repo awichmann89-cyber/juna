@@ -6,12 +6,14 @@ import { inviteMember, memberAction, type MemberState } from "./actions";
 import { Field, Input, Select } from "@/components/ui/form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Alert } from "@/components/ui/feedback";
+import { ManualLink } from "@/components/manual-link";
 
 export function InviteForm() {
   const [state, action] = useActionState<MemberState, FormData>(inviteMember, {});
   return (
     <form action={action} className="flex flex-col gap-4" key={state.ok ?? JSON.stringify(state.values ?? {})}>
       {state.ok && <Alert tone="success">{state.ok}</Alert>}
+      {state.link && <ManualLink url={state.link} label="Einladungslink" />}
       {state.error && <Alert tone="error">{state.error}</Alert>}
       <Field label="Name" htmlFor="displayName" error={state.fieldErrors?.displayName}>
         <Input id="displayName" name="displayName" defaultValue={state.values?.displayName} required maxLength={80} autoComplete="off" />
@@ -69,6 +71,11 @@ export function MemberMenu({ member, isSelf }: { member: Member; isSelf: boolean
       </details>
       {state.error && <span className="max-w-56 text-right text-xs text-danger">{state.error}</span>}
       {state.ok && <span className="max-w-56 text-right text-xs text-success">{state.ok}</span>}
+      {state.link && (
+        <div className="w-64 max-w-[65vw]">
+          <ManualLink url={state.link} label="Einladungslink" />
+        </div>
+      )}
     </div>
   );
 }

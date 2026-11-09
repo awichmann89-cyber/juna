@@ -1,6 +1,11 @@
 import "server-only";
 import { env } from "@/lib/env";
 
+/** true, wenn echte Mails verschickt werden (RESEND_API_KEY gesetzt). */
+export function mailEnabled() {
+  return Boolean(env.resendApiKey);
+}
+
 type Mail = { to: string | string[]; subject: string; text: string; html?: string; replyTo?: string };
 
 /**

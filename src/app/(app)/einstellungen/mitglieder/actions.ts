@@ -7,12 +7,15 @@ import { adminDb, schema } from "@/db";
 import { requireOrgAdmin } from "@/lib/auth";
 import { auth } from "@/lib/better-auth";
 import { InviteError, inviteUser, resendInvite } from "@/lib/invitations";
+import { mailEnabled } from "@/lib/mail";
 
 export type MemberState = {
   ok?: string;
   error?: string;
   fieldErrors?: Record<string, string>;
   values?: Record<string, string>;
+  /** Nur ohne Mailversand: Link zum manuellen Weitergeben */
+  link?: string;
 };
 
 const inviteSchema = z.object({
@@ -36,14 +39,15 @@ export async function inviteMember(_prev: MemberState, formData: FormData): Prom
     for (const i of parsed.error.issues) fieldErrors[String(i.path[0])] ??= i.message;
     return { fieldErrors, values };
   }
+  let url: string;
   try {
-    await inviteUser({ ...parsed.data, orgId: admin.org.id });
+    ({ url } = await inviteUser({ ...parsed.data, orgId: admin.org.id }));
   } catch (e) {
     if (!(e instanceof InviteError)) console.error("[mitglieder:invite]", e);
     return { error: e instanceof InviteError ? e.message : "Die Einladung ist fehlgeschlagen.", values };
   }
   revalidatePath("/einstellungen/mitglieder");
-  return { ok: `${parsed.data.displayName} wurde eingeladen.` };
+  return { ok: `${parsed.data.displayName} wurde eingeladen.`, link: mailEnabled() ? undefined : url };
 }
 
 /** Lädt das Ziel-Mitglied – ausschließlich aus der eigenen Organisation. */
@@ -109,13 +113,14 @@ export async function memberAction(_prev: MemberState, formData: FormData): Prom
         .where(byId);
       break;
     case "resend":
+      let url: string;
       try {
-        await resendInvite(target.id);
+        ({ url } = await resendInvite(target.id));
       } catch (e) {
         return { error: e instanceof InviteError ? e.message : "Erneutes Einladen fehlgeschlagen." };
       }
       revalidatePath("/einstellungen/mitglieder");
-      return { ok: `Neue Einladung an ${target.displayName} verschickt.` };
+      return { ok: `Neue Einladung an ${target.displayName} verschickt.`, link: mailEnabled() ? undefined : url };
   }
   revalidatePath("/einstellungen/mitglieder");
   return { ok: "Gespeichert." };
