@@ -75,6 +75,10 @@ async function waitSaved(page) {
     title: 'Kuchenverkauf Ostern', series: 'Kuchenverkauf', date: '2027-04-04', start: '10:00', end: '13:00', location: 'Pfarrheim',
   });
   await lena.getByRole('heading', { name: /Kuchenverkauf Ostern/ }).waitFor();
+  // Start-Tab ist der Zeitplan; Notizen stehen im Tab „Planung“
+  await lena.getByRole('link', { name: /^Zeitplan/ }).and(lena.locator('[aria-current=page]')).waitFor();
+  await lena.getByRole('link', { name: /^Planung/ }).click();
+  await lena.waitForURL(/tab=planung/);
   await lena.locator('.bn-editor').click();
   await lena.keyboard.type('# Ablauf');
   await lena.keyboard.press('Enter');
@@ -136,9 +140,9 @@ async function waitSaved(page) {
 
   // Konflikt: zwei Fenster bearbeiten gleichzeitig
   const second = await ctx.newPage();
-  await second.goto(`${BASE}/aktionen/${ostern}`);
+  await second.goto(`${BASE}/aktionen/${ostern}?tab=planung`);
   await second.locator('.bn-editor').waitFor();
-  await lena.goto(`${BASE}/aktionen/${ostern}`);
+  await lena.goto(`${BASE}/aktionen/${ostern}?tab=planung`);
   await lena.locator('.bn-editor').click();
   await lena.keyboard.press('Control+End');
   await lena.keyboard.press('Enter');
@@ -158,7 +162,7 @@ async function waitSaved(page) {
   await lenaPhone.goto(BASE + '/aktionen');
   await lenaPhone.getByText('Kuchenverkauf Pfingsten', { exact: true }).waitFor();
   await shot(lenaPhone, 'p2-liste-mobil');
-  await lenaPhone.goto(`${BASE}/aktionen/${ostern}`);
+  await lenaPhone.goto(`${BASE}/aktionen/${ostern}?tab=planung`);
   await lenaPhone.locator('.bn-editor').waitFor();
   await shot(lenaPhone, 'p2-detail-mobil');
   await lenaPhone.goto(`${BASE}/aktionen?ansicht=kalender&monat=2027-04`);

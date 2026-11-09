@@ -4,11 +4,18 @@ import "@blocknote/mantine/style.css";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { BlockNoteSchema, defaultBlockSpecs, type BlockNoteEditor, type PartialBlock } from "@blocknote/core";
 import { de } from "@blocknote/core/locales";
-import { useCreateBlockNote } from "@blocknote/react";
+import {
+  getDefaultReactSlashMenuItems,
+  SuggestionMenuController,
+  useCreateBlockNote,
+} from "@blocknote/react";
+import { filterSuggestionItems } from "@blocknote/core/extensions";
 import { BlockNoteView, type Theme } from "@blocknote/mantine";
 import { CircleAlert, Check, LoaderCircle } from "lucide-react";
+import { TaskBlock } from "./task-blocks";
 import { saveNotes } from "@/app/(app)/aktionen/actions";
 import { saveMeetingNotes } from "@/app/(app)/leiterrunde/actions";
+import { TaskBlocksProvider, taskSlashItem, useTaskBlocks, type TaskConfig } from "./task-blocks";
 
 // Medien (Bild/Video/Audio/Datei) kommen mit dem Tab „Dateien“ (Phase 4) – bis dahin aus dem Editor entfernt
 const { image: _image, video: _video, audio: _audio, file: _file, ...blockSpecs } = defaultBlockSpecs;
@@ -17,6 +24,8 @@ void _video;
 void _audio;
 void _file;
 export const schema = BlockNoteSchema.create({ blockSpecs });
+/** Planung einer Aktion: zusätzlich Aufgaben-Blöcke */
+export const actionSchema = BlockNoteSchema.create({ blockSpecs: { ...blockSpecs, task: TaskBlock() } });
 
 const shared = { borderRadius: 10, fontFamily: "var(--font-nunito), ui-sans-serif, system-ui, sans-serif" };
 export const lightTheme: Theme = {
@@ -77,6 +86,8 @@ export type NotesEditorProps = {
   live?: boolean;
   /** Liveblocks-Raum (nur im Live-Modus) */
   roomId?: string;
+  /** Aufgaben der Aktion → Aufgaben-Blöcke („/Aufgabe“) */
+  tasks?: TaskConfig;
 };
 
 export function editorDictionary(placeholder?: string) {
@@ -105,9 +116,10 @@ export default function NotesEditor(props: NotesEditorProps) {
 
 function PlainNotesEditor(props: NotesEditorProps) {
   const editor = useCreateBlockNote({
-    schema,
+    schema: props.tasks ? actionSchema : schema,
     dictionary: editorDictionary(props.placeholder),
-    initialContent: initialContentOf(props.initialBlocks),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    initialContent: initialContentOf(props.initialBlocks) as any,
   });
   return <EditorWithAutosave editor={editor} {...props} />;
 }
@@ -127,6 +139,7 @@ export function EditorWithAutosave({
   initialVersion,
   lastSavedLabel,
   live,
+  tasks,
   children,
 }: NotesEditorProps & { editor: AnyEditor; children?: React.ReactNode }) {
   const dark = useDarkMode();
@@ -220,6 +233,20 @@ export function EditorWithAutosave({
     };
   }, [flush]);
 
+  const view = (
+      <div className="juna-editor -mx-2 min-h-64 rounded-xl sm:-mx-3">
+        <BlockNoteView
+          editor={editor}
+          theme={dark ? darkTheme : lightTheme}
+          onChange={live ? undefined : schedule}
+          editable={state.kind !== "conflict"}
+          slashMenu={false}
+        >
+          <SlashMenu editor={editor} />
+        </BlockNoteView>
+      </div>
+  );
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
@@ -238,15 +265,33 @@ export function EditorWithAutosave({
           </button>
         </div>
       )}
-      <div className="juna-editor -mx-2 min-h-64 rounded-xl sm:-mx-3">
-        <BlockNoteView
-          editor={editor}
-          theme={dark ? darkTheme : lightTheme}
-          onChange={live ? undefined : schedule}
-          editable={state.kind !== "conflict"}
-        />
-      </div>
+      {tasks ? (
+        <TaskBlocksProvider editor={editor} config={tasks}>
+          {view}
+        </TaskBlocksProvider>
+      ) : (
+        view
+      )}
     </div>
+  );
+}
+
+/** Slash-Menü: BlockNote-Standard + „Aufgabe“ (nur in der Planung einer Aktion) */
+function SlashMenu({ editor }: { editor: AnyEditor }) {
+  const tasks = useTaskBlocks();
+  return (
+    <SuggestionMenuController
+      triggerCharacter="/"
+      getItems={async (query) =>
+        filterSuggestionItems(
+          [
+            ...(tasks ? [taskSlashItem(editor, tasks.openCreate, tasks.pending)] : []),
+            ...getDefaultReactSlashMenuItems(editor),
+          ],
+          query,
+        )
+      }
+    />
   );
 }
 

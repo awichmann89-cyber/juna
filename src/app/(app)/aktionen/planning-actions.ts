@@ -8,7 +8,14 @@ import { feedbackKind, participationStatus } from "@/db/schema";
 import { requireOrgUser, type OrgUser } from "@/lib/auth";
 import { daysBetween, localTs, shiftTs } from "@/lib/planning";
 
-export type PlanFormState = { ok?: string; error?: string; fieldErrors?: Record<string, string>; values?: Record<string, string> };
+export type PlanFormState = {
+  ok?: string;
+  error?: string;
+  fieldErrors?: Record<string, string>;
+  values?: Record<string, string>;
+  /** ID der gespeicherten Aufgabe (für Aufgaben-Blöcke in der Planung) */
+  taskId?: string;
+};
 
 const uuid = z.uuid();
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -258,6 +265,30 @@ const taskSchema = z
     }
   });
 
+type Block = { type?: unknown; props?: Record<string, unknown>; children?: unknown[] } & Record<string, unknown>;
+
+function hasTaskBlocks(blocks: unknown): boolean {
+  return Array.isArray(blocks) && blocks.some((b: Block) => b?.type === "task" || hasTaskBlocks(b?.children));
+}
+
+/**
+ * Aufgaben-Blöcke auf die neu angelegten Aufgaben umbiegen.
+ * Ohne übernommene Aufgabe wird daraus ein normaler Checklisten-Punkt mit dem alten Titel.
+ */
+function remapTaskBlocks(blocks: unknown[], map: Map<string, string>, titles: Map<string, string>): unknown[] {
+  return blocks.map((raw) => {
+    const b = raw as Block;
+    const children = Array.isArray(b.children) ? remapTaskBlocks(b.children, map, titles) : [];
+    if (b.type !== "task") return { ...b, children };
+    const oldId = String(b.props?.taskId ?? "");
+    const newId = map.get(oldId);
+    if (newId) return { ...b, props: { ...b.props, taskId: newId }, children };
+    const title = titles.get(oldId);
+    if (!title) return null;
+    return { type: "checkListItem", props: { checked: false }, content: [{ type: "text", text: title, styles: {} }], children };
+  }).filter(Boolean);
+}
+
 export async function saveTask(_prev: PlanFormState, formData: FormData): Promise<PlanFormState> {
   const user = await requireOrgUser();
   const values = Object.fromEntries(
@@ -311,7 +342,7 @@ export async function saveTask(_prev: PlanFormState, formData: FormData): Promis
       if (valid.length) {
         await tx.insert(schema.taskAssignees).values(valid.map((userId) => ({ orgId: user.org.id, taskId: taskId!, userId })));
       }
-      res = { ok: v.taskId ? "Aufgabe gespeichert." : `Aufgabe „${v.title}“ angelegt.` };
+      res = { ok: v.taskId ? "Aufgabe gespeichert." : `Aufgabe „${v.title}“ angelegt.`, taskId };
     });
   } catch (e) {
     console.error("[aufgaben]", e);
@@ -469,11 +500,16 @@ export async function copyFromPrevious(_prev: PlanFormState, formData: FormData)
         copied.push(`${slots.length} Zeitslot${slots.length === 1 ? "" : "s"}`);
       }
     }
+    // Aufgaben-Blöcke in den kopierten Notizen: alte → neue Aufgaben-ID
+    const sourceTasks = await tx
+      .select({ id: schema.tasks.id, title: schema.tasks.title })
+      .from(schema.tasks)
+      .where(eq(schema.tasks.actionId, source.id));
+    const taskIdMap = new Map<string, string>();
     if (parts.includes("aufgaben")) {
       const tasks = await tx.select().from(schema.tasks).where(eq(schema.tasks.actionId, source.id));
       if (tasks.length) {
-        await tx.insert(schema.tasks).values(
-          tasks.map((t) => {
+        const rows = tasks.map((t) => {
             // Absolute Deadlines werden relativ übernommen („so viele Tage vorher wie letztes Mal“)
             let dueDaysBefore = t.dueDaysBefore;
             let dueDate: string | null = null;
@@ -482,9 +518,13 @@ export async function copyFromPrevious(_prev: PlanFormState, formData: FormData)
               else dueDate = t.dueDate;
             }
             if (dueDaysBefore != null && !target.date) dueDaysBefore = null;
-            return { orgId: user.org.id, actionId: target.id, title: t.title, description: t.description, dueDaysBefore, dueDate };
-          }),
-        );
+            return { sourceId: t.id, orgId: user.org.id, actionId: target.id, title: t.title, description: t.description, dueDaysBefore, dueDate };
+          });
+        // Einzeln einfügen, damit die Zuordnung alt → neu eindeutig ist
+        for (const { sourceId, ...row } of rows) {
+          const [created] = await tx.insert(schema.tasks).values(row).returning({ id: schema.tasks.id });
+          taskIdMap.set(sourceId, created!.id);
+        }
         copied.push(`${tasks.length} Aufgabe${tasks.length === 1 ? "" : "n"} (offen, ohne Zuständige)`);
       }
     }
@@ -502,23 +542,24 @@ export async function copyFromPrevious(_prev: PlanFormState, formData: FormData)
         copied.push("Planungsteam");
       }
     }
-    if (parts.includes("notizen") && source.notes && source.notesText) {
+    if (parts.includes("notizen") && Array.isArray(source.notes) && source.notes.length > 0) {
       const [t] = await tx
-        .select({ notesText: schema.actions.notesText, notesVersion: schema.actions.notesVersion })
+        .select({ notes: schema.actions.notes, notesText: schema.actions.notesText, notesVersion: schema.actions.notesVersion })
         .from(schema.actions)
         .where(eq(schema.actions.id, target.id));
-      if (t && t.notesText.trim() === "") {
+      if (t && t.notesText.trim() === "" && !hasTaskBlocks(t.notes)) {
+        const titles = new Map(sourceTasks.map((x) => [x.id, x.title]));
         await tx
           .update(schema.actions)
           .set({
-            notes: source.notes,
+            notes: remapTaskBlocks(source.notes, taskIdMap, titles),
             notesText: source.notesText,
             notesVersion: t.notesVersion + 1,
             notesUpdatedAt: new Date(),
             notesUpdatedBy: user.id,
           })
           .where(eq(schema.actions.id, target.id));
-        copied.push("Notizen");
+        copied.push("Planung");
       }
     }
   }).catch((e) => {

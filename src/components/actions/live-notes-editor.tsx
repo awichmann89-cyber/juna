@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ClientSideSuspense, LiveblocksProvider, RoomProvider, useOthers, useSelf, useStatus } from "@liveblocks/react/suspense";
 import { useCreateBlockNoteWithLiveblocks, useIsEditorReady } from "@liveblocks/react-blocknote";
 import { CloudOff } from "lucide-react";
-import { EditorWithAutosave, editorDictionary, initialContentOf, schema, type NotesEditorProps } from "./notes-editor";
+import { EditorWithAutosave, editorDictionary, actionSchema, initialContentOf, schema, type NotesEditorProps } from "./notes-editor";
 
 export default function LiveNotesEditor(props: NotesEditorProps) {
   if (!props.roomId) return null;
@@ -23,7 +23,8 @@ export default function LiveNotesEditor(props: NotesEditorProps) {
 
 function LiveEditor(props: NotesEditorProps) {
   const editor = useCreateBlockNoteWithLiveblocks(
-    { schema, dictionary: editorDictionary(props.placeholder) },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { schema: (props.tasks ? actionSchema : schema) as any, dictionary: editorDictionary(props.placeholder) },
     { mentions: false, comments: false },
   );
   const ready = useIsEditorReady();

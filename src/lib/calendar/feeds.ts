@@ -407,14 +407,14 @@ export async function personalFeed(owner: FeedOwner) {
     if (!due || due < from || due > to) continue;
     const lines = [`Aufgabe für „${task.actionTitle}“`];
     if (task.description) lines.push(task.description);
-    lines.push("", link(`/aktionen/${task.actionId}?tab=aufgaben`));
+    lines.push("", link(`/aktionen/${task.actionId}?tab=planung`));
     events.push({
       uid: uidOf("aufgabe", task.id, owner.userId),
       summary: `☐ ${task.title} (${task.actionTitle})`,
       start: { kind: "date", date: due },
       end: { kind: "date", date: addDays(due, 1) },
       description: lines.join("\n"),
-      url: link(`/aktionen/${task.actionId}?tab=aufgaben`),
+      url: link(`/aktionen/${task.actionId}?tab=planung`),
       sequence: sequenceOf(task.updatedAt),
       lastModified: task.updatedAt,
       transparent: true,

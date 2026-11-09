@@ -9,7 +9,6 @@ import {
   Clock,
   FolderOpen,
   History,
-  ListChecks,
   MapPin,
   MessageSquareHeart,
   Pencil,
@@ -32,7 +31,6 @@ import { liveblocksEnabled, roomIdFor } from "@/lib/liveblocks";
 import { FeedbackTab } from "@/components/planning/feedback-tab";
 import { LastTime } from "@/components/planning/last-time";
 import { ScheduleTab } from "@/components/planning/schedule-tab";
-import { TasksTab } from "@/components/planning/tasks-tab";
 import { TeamTab } from "@/components/planning/team-tab";
 import {
   actionFeedback,
@@ -49,15 +47,16 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = { title: "Aktion" };
 
 const tabs = [
-  { key: "notizen", label: "Notizen", icon: ClipboardList },
   { key: "zeitplan", label: "Zeitplan", icon: CalendarClock },
   { key: "team", label: "Team", icon: Users },
-  { key: "aufgaben", label: "Aufgaben", icon: ListChecks },
+  { key: "planung", label: "Planung", icon: ClipboardList },
   { key: "feedback", label: "Feedback", icon: MessageSquareHeart },
   { key: "dateien", label: "Dateien", icon: FolderOpen },
   { key: "historie", label: "Historie", icon: History, mobileOnly: true },
 ] as const;
 type TabKey = (typeof tabs)[number]["key"];
+/** Alte Links (?tab=notizen / ?tab=aufgaben) landen in der Planung */
+const tabAliases: Record<string, TabKey> = { notizen: "planung", aufgaben: "planung" };
 
 const savedFmt = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Berlin" });
 
@@ -123,21 +122,27 @@ async function ActionPage({
   const sp = await searchParams;
   const action = await getAction(user, id);
   if (!action) notFound();
-  const tab: TabKey = tabs.some((t) => t.key === sp.tab) ? (sp.tab as TabKey) : "notizen";
+  const requested = typeof sp.tab === "string" ? (tabAliases[sp.tab] ?? sp.tab) : undefined;
+  const tab: TabKey = tabs.some((t) => t.key === requested) ? (requested as TabKey) : "zeitplan";
   const activeTab = tabs.find((t) => t.key === tab)!;
   const today = todayIso();
   const counts = await planningCounts(user, action.id);
   const badge: Partial<Record<TabKey, number>> = {
     zeitplan: counts.slots,
     team: counts.dabei,
-    aufgaben: counts.tasks_open,
+    planung: counts.tasks_open,
     feedback: counts.feedback,
     dateien: counts.files,
   };
 
   let tabContent: React.ReactNode;
-  if (tab === "notizen") {
-    const [lastTime, sources] = await Promise.all([lastTimeItems(user, action), copySources(user, action)]);
+  if (tab === "planung") {
+    const [lastTime, sources, tasks, members] = await Promise.all([
+      lastTimeItems(user, action),
+      copySources(user, action),
+      actionTasks(user, action.id, action.date),
+      orgMembers(user),
+    ]);
     const live = liveblocksEnabled();
     const isEmpty = counts.slots === 0 && counts.tasks_open === 0 && !action.notesText;
     tabContent = (
@@ -164,6 +169,14 @@ async function ActionPage({
               actionId={action.id}
               live={live}
               roomId={live ? roomIdFor(user.org.id, "aktion", action.id) : undefined}
+              placeholder="Ablauf, Material, Ideen … Tippe „/“ für Blöcke, „/Aufgabe“ für eine Aufgabe"
+              tasks={{
+                actionId: action.id,
+                hasDate: Boolean(action.date),
+                today,
+                members: members.filter((m) => m.status !== "deactivated").map((m) => ({ id: m.id, name: m.name })),
+                tasks,
+              }}
               initialBlocks={action.notes}
               initialVersion={action.notesVersion}
               lastSavedLabel={
@@ -184,9 +197,6 @@ async function ActionPage({
       ) : (
         <TeamTab user={user} action={action} planning={planning} members={members} />
       );
-  } else if (tab === "aufgaben") {
-    const [tasks, members] = await Promise.all([actionTasks(user, action.id, action.date), orgMembers(user)]);
-    tabContent = <TasksTab action={action} tasks={tasks} members={members} today={today} />;
   } else if (tab === "feedback") {
     tabContent = <FeedbackTab user={user} action={action} items={await actionFeedback(user, action.id)} />;
   } else if (tab === "dateien") {
@@ -261,7 +271,7 @@ async function ActionPage({
             {tabs.map((t) => (
               <Link
                 key={t.key}
-                href={t.key === "notizen" ? `/aktionen/${action.id}` : `/aktionen/${action.id}?tab=${t.key}`}
+                href={t.key === "zeitplan" ? `/aktionen/${action.id}` : `/aktionen/${action.id}?tab=${t.key}`}
                 scroll={false}
                 aria-current={t.key === tab ? "page" : undefined}
                 className={cn(

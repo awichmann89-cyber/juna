@@ -77,7 +77,7 @@ export function TaskRow({
             <span className="text-warning">niemand zuständig</span>
           )}
           {showAction && "actionTitle" in task && (
-            <Link href={`/aktionen/${task.actionId}?tab=aufgaben`} className="font-semibold text-primary hover:underline">
+            <Link href={`/aktionen/${task.actionId}?tab=planung`} className="font-semibold text-primary hover:underline">
               {task.actionTitle}
               {task.actionDate && ` · ${formatActionDate({ date: task.actionDate }, "short")}`}
             </Link>

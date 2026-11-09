@@ -9,7 +9,6 @@ import {
   ChevronRight,
   ClipboardList,
   ExternalLink,
-  ListChecks,
   MapPin,
   MessageSquareHeart,
   NotebookPen,
@@ -23,7 +22,6 @@ import { AutoRefresh } from "@/components/meetings/auto-refresh";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { FeedbackTab } from "@/components/planning/feedback-tab";
 import { ScheduleTab } from "@/components/planning/schedule-tab";
-import { TasksTab } from "@/components/planning/tasks-tab";
 import { TeamTab } from "@/components/planning/team-tab";
 import { buttonClass, LinkButton } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,11 +37,10 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = { title: "Ablauf" };
 
 const areas = [
-  { key: "feedback", label: "Feedback", icon: MessageSquareHeart },
-  { key: "team", label: "Team", icon: Users },
-  { key: "aufgaben", label: "Aufgaben", icon: ListChecks },
   { key: "zeitplan", label: "Zeitplan", icon: CalendarClock },
-  { key: "notizen", label: "Notizen", icon: ClipboardList },
+  { key: "team", label: "Team", icon: Users },
+  { key: "planung", label: "Planung", icon: ClipboardList },
+  { key: "feedback", label: "Feedback", icon: MessageSquareHeart },
 ] as const;
 type AreaKey = (typeof areas)[number]["key"];
 
@@ -81,7 +78,8 @@ async function Walkthrough({
   const item = agenda[index]!;
   const href = (punkt: number, bereich?: string) => `${base}/ablauf?punkt=${punkt}${bereich ? `&bereich=${bereich}` : ""}`;
   const defaultArea: AreaKey = item.kind === "feedback" ? "feedback" : "team";
-  const area: AreaKey = areas.some((a) => a.key === sp.bereich) ? (sp.bereich as AreaKey) : defaultArea;
+  const bereich = sp.bereich === "aufgaben" || sp.bereich === "notizen" ? "planung" : sp.bereich;
+  const area: AreaKey = areas.some((a) => a.key === bereich) ? (bereich as AreaKey) : defaultArea;
   const isLast = index === agenda.length - 1;
   const nextHref = isLast ? base : href(index + 2);
 
@@ -100,22 +98,37 @@ async function Walkthrough({
         ) : (
           <ScheduleTab action={action} planning={planning} members={members} />
         );
-    } else if (area === "aufgaben") {
-      const [tasks, members] = await Promise.all([actionTasks(user, action.id, action.date), orgMembers(user)]);
-      content = <TasksTab action={action} tasks={tasks} members={members} today={today} />;
     } else if (area === "feedback") {
       content = <FeedbackTab user={user} action={action} items={await actionFeedback(user, action.id)} />;
     } else {
-      content = action.notesText ? (
-        <div className="whitespace-pre-wrap rounded-xl bg-surface-2 p-3 text-sm">{action.notesText}</div>
-      ) : (
-        <p className="text-sm text-muted">Noch keine Notizen.</p>
+      const [tasks, members] = await Promise.all([actionTasks(user, action.id, action.date), orgMembers(user)]);
+      content = (
+        <Card>
+          <CardContent className="pt-4">
+            <NotesEditorLoader
+              key={live ? `a-${action.id}` : `a-${action.id}:${action.notesVersion}`}
+              actionId={action.id}
+              live={live}
+              roomId={live ? roomIdFor(user.org.id, "aktion", action.id) : undefined}
+              placeholder="Ablauf, Material, Ideen … „/Aufgabe“ für eine Aufgabe"
+              initialBlocks={action.notes}
+              initialVersion={action.notesVersion}
+              tasks={{
+                actionId: action.id,
+                hasDate: Boolean(action.date),
+                today,
+                members: members.filter((m) => m.status !== "deactivated").map((m) => ({ id: m.id, name: m.name })),
+                tasks,
+              }}
+            />
+          </CardContent>
+        </Card>
       );
     }
   }
   const counts = action ? await planningCounts(user, action.id) : null;
   const badge: Partial<Record<AreaKey, number>> = counts
-    ? { feedback: counts.feedback, team: counts.dabei, aufgaben: counts.tasks_open, zeitplan: counts.slots }
+    ? { feedback: counts.feedback, team: counts.dabei, planung: counts.tasks_open, zeitplan: counts.slots }
     : {};
 
   return (

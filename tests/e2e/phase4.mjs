@@ -195,10 +195,11 @@ function assert(cond, msg) {
   await lena.getByRole('heading', { name: 'Kassenstand' }).waitFor();
   await Promise.all([lena.waitForURL(/punkt=2/), lena.getByRole('button', { name: /Erledigt & weiter/ }).click()]);
   await lena.getByRole('heading', { name: /Kuchenverkauf Ostern/ }).waitFor();
-  // Planungspunkt startet im Bereich Team; Wechsel zu Aufgaben und Feedback
+  // Planungspunkt startet im Bereich Team; Wechsel zu Planung (mit Aufgaben-Blöcken) und Feedback
   await lena.getByRole('link', { name: /^Team/ }).and(lena.locator('[aria-current=page]')).waitFor();
-  await lena.getByRole('link', { name: /^Aufgaben/ }).click();
-  await lena.waitForURL(/bereich=aufgaben/);
+  await lena.getByRole('link', { name: /^Planung/ }).click();
+  await lena.waitForURL(/bereich=planung/);
+  await lena.locator('[data-task-block]', { hasText: 'Plakat drucken' }).waitFor();
   await lena.getByRole('link', { name: /^Feedback/ }).click();
   await lena.waitForURL(/bereich=feedback/);
   await shot(lena, 'ablauf-desktop');

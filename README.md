@@ -54,6 +54,14 @@ Der vollständige Projektplan liegt im claude.ai-Projekt „juna“ (`projektpla
 - Token = Feed-ID + HMAC (Schlüssel aus `BETTER_AUTH_SECRET`, nicht in der DB); „Links zurücksetzen“ macht alte Links ungültig. Deaktivierte Mitglieder und gesperrte Organisationen bekommen 404. Rate-Limit pro IP und pro Feed.
 - Hinweis: Google Kalender aktualisiert Abos nur etwa alle 12–24 Stunden, iOS lässt sich auf 15 Minuten stellen.
 
+## Aktion: Tabs und Aufgaben-Blöcke
+
+- Reihenfolge: **Zeitplan** (Start-Tab) · **Team** · **Planung** · **Feedback** · **Dateien** (· Historie unter 1536 px Breite)
+- **Planung** (vorher „Notizen“) enthält Aufgaben direkt im Text: „/Aufgabe“ im Editor öffnet einen Dialog (Titel, Deadline relativ/fest, Zuständige); der Block zeigt Status, Deadline und Zuständige und lässt sich abhaken oder bearbeiten
+- Der Block speichert nur die Aufgaben-ID – es sind dieselben Aufgaben wie in „Meine Aufgaben“ und im Kalender. Block löschen löscht die Aufgabe nicht; Aufgaben ohne Block stehen unter „Weitere Aufgaben dieser Aktion“ (mit „Einfügen“)
+- „Von früherer Durchführung übernehmen“ biegt Aufgaben-Blöcke auf die neu angelegten Aufgaben um (ohne übernommene Aufgaben werden es Checklisten-Punkte)
+- Alte Links `?tab=notizen` und `?tab=aufgaben` führen zur Planung
+
 ## Einrichtung
 
 ### 1. Neon

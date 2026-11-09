@@ -38,7 +38,7 @@ export function CopyPanel({ actionId, sources, targetHasNotes }: { actionId: str
     { key: "zeitplan", label: "Zeitplan", count: src?.slots ?? 0, hint: "auf das neue Datum verschoben" },
     { key: "aufgaben", label: "Aufgaben", count: src?.tasks ?? 0, hint: "offen, Deadlines relativ, ohne Zuständige" },
     { key: "planungsteam", label: "Planungsteam", count: src?.planners ?? 0, hint: "" },
-    { key: "notizen", label: "Notizen", count: src?.hasNotes && !targetHasNotes ? 1 : 0, hint: targetHasNotes ? "nur wenn hier noch keine Notizen stehen" : "als Ausgangsbasis" },
+    { key: "notizen", label: "Planung", count: src?.hasNotes && !targetHasNotes ? 1 : 0, hint: targetHasNotes ? "nur wenn hier noch nichts geplant ist" : "Text und Aufgaben-Blöcke als Ausgangsbasis" },
   ];
   return (
     <form action={action} className="flex flex-col gap-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { saveTask, type PlanFormState } from "@/app/(app)/aktionen/planning-actions";
 import { Field, Input, Textarea } from "@/components/ui/form";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -21,13 +21,25 @@ export function TaskForm({
   hasDate,
   members,
   task,
+  onSaved,
+  autoFocus,
 }: {
   actionId: string;
   hasDate: boolean;
   members: { id: string; name: string }[];
   task?: TaskDefaults;
+  /** Wird nach erfolgreichem Speichern mit der Aufgaben-ID aufgerufen */
+  onSaved?: (taskId: string) => void;
+  autoFocus?: boolean;
 }) {
   const [state, action] = useActionState<PlanFormState, FormData>(saveTask, {});
+  const onSavedRef = useRef(onSaved);
+  useEffect(() => {
+    onSavedRef.current = onSaved;
+  });
+  useEffect(() => {
+    if (state.ok && state.taskId) onSavedRef.current?.(state.taskId);
+  }, [state]);
   const v = state.values;
   const initialMode = v?.dueMode ?? (task ? (task.dueDate ? "datum" : task.dueDaysBefore != null ? "relativ" : "ohne") : hasDate ? "relativ" : "ohne");
   const [mode, setMode] = useState(initialMode);
@@ -43,7 +55,7 @@ export function TaskForm({
       <input type="hidden" name="actionId" value={actionId} />
       {task && <input type="hidden" name="taskId" value={task.id} />}
       <Field label="Aufgabe" htmlFor={`${p}-title`} error={fe.title}>
-        <Input id={`${p}-title`} name="title" required maxLength={200} placeholder="z. B. Plakat drucken" defaultValue={v?.title ?? task?.title} />
+        <Input id={`${p}-title`} name="title" required maxLength={200} placeholder="z. B. Plakat drucken" defaultValue={v?.title ?? task?.title} autoFocus={autoFocus} />
       </Field>
 
       <fieldset>

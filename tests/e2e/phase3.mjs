@@ -43,6 +43,23 @@ async function addSlot(page, title, start, end, min) {
   await form.getByRole('button', { name: 'Zum Zeitplan hinzufügen' }).click();
   await page.getByText(`„${title}“ hinzugefügt.`).waitFor();
 }
+async function addTaskBlock(page, title, fill) {
+  // In die letzte Textzeile klicken (nicht auf einen Aufgaben-Block) und eine neue Zeile beginnen
+  const last = page.locator('.bn-editor .bn-inline-content').last();
+  const box = await last.boundingBox();
+  await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('/Aufgabe');
+  await page.locator('.bn-mt-suggestion-menu-item-title', { hasText: 'Aufgabe' }).first().waitFor();
+  await page.keyboard.press('Enter');
+  const dlg = page.locator('dialog[open]');
+  await dlg.locator('input[name=title]').fill(title);
+  await fill(dlg);
+  await dlg.getByRole('button', { name: 'Aufgabe anlegen' }).click();
+  await dlg.waitFor({ state: 'detached' });
+  await page.locator('[data-task-block]', { hasText: title }).waitFor();
+}
 function memberRow(page, name) {
   return page.locator('li', { has: page.locator('span.font-bold', { hasText: new RegExp(`^${name}$`) }) }).first();
 }
@@ -122,21 +139,22 @@ function memberRow(page, name) {
   await shot(lena, 'p3-team-desktop');
   log('Planungsteam gespeichert');
 
-  // Aufgaben
-  await lena.goto(`${BASE}/aktionen/${ostern}?tab=aufgaben`);
-  const newTask = () => lena.locator('form', { has: lena.getByRole('button', { name: 'Aufgabe anlegen' }) });
-  await newTask().locator('input[name=title]').fill('Plakat drucken');
-  await newTask().locator('input[name=dueDaysBefore]').fill('14');
-  await newTask().getByText('Tim Teamer', { exact: true }).click();
-  await newTask().getByRole('button', { name: 'Aufgabe anlegen' }).click();
-  await lena.getByText('Aufgabe „Plakat drucken“ angelegt.').waitFor();
-  await newTask().locator('input[name=title]').fill('Waffeleisen leihen');
-  await newTask().getByText('Festes Datum').click();
-  await newTask().locator('input[name=dueDate]').fill('2027-03-30');
-  await newTask().getByText('Lena Krämer', { exact: true }).click();
-  await newTask().getByRole('button', { name: 'Aufgabe anlegen' }).click();
-  await lena.getByText('Aufgabe „Waffeleisen leihen“ angelegt.').waitFor();
-  await lena.getByText('So., 21. März').waitFor(); // 04.04. − 14 Tage
+  // Aufgaben als Blöcke in der Planung („/Aufgabe“)
+  await lena.goto(`${BASE}/aktionen/${ostern}?tab=planung`);
+  await addTaskBlock(lena, 'Plakat drucken', async (dlg) => {
+    await dlg.locator('input[name=dueDaysBefore]').fill('14');
+    await dlg.getByText('Tim Teamer', { exact: true }).click();
+  });
+  await lena.locator('[data-task-block]', { hasText: 'Plakat drucken' }).getByText('So., 21. März').waitFor(); // 04.04. − 14 Tage
+  await addTaskBlock(lena, 'Waffeleisen leihen', async (dlg) => {
+    await dlg.getByText('Festes Datum').click();
+    await dlg.locator('input[name=dueDate]').fill('2027-03-30');
+    await dlg.getByText('Lena Krämer', { exact: true }).click();
+  });
+  await lena.locator('[data-save-state=saved]').filter({ hasText: 'Gespeichert um' }).waitFor({ timeout: 15000 });
+  await lena.reload();
+  for (const t of ['Plakat drucken', 'Waffeleisen leihen']) await lena.locator('[data-task-block]', { hasText: t }).waitFor();
+  await shot(lena, 'p3-planung-aufgaben');
   log('Aufgaben mit relativer und fester Deadline angelegt');
 
   await tim.goto(BASE + '/aufgaben');
@@ -151,8 +169,8 @@ function memberRow(page, name) {
   await lena.goto(`${BASE}/aktionen/${ostern}/bearbeiten`);
   await lena.fill('#date', '2027-04-11');
   await Promise.all([lena.waitForURL(new RegExp(`/aktionen/${ostern}$`)), lena.getByRole('button', { name: 'Speichern' }).click()]);
-  await lena.goto(`${BASE}/aktionen/${ostern}?tab=aufgaben`);
-  await lena.getByText('erledigt von Tim Teamer').waitFor({ state: 'attached' });
+  await lena.goto(`${BASE}/aktionen/${ostern}?tab=planung`);
+  await lena.locator('[data-task-block]', { hasText: 'erledigt von Tim Teamer' }).waitFor();
   await lena.goto(`${BASE}/aktionen/${ostern}?tab=zeitplan`);
   await slotCard('Aufbau').getByText('08:00–10:00').waitFor();
   if (DB) {
@@ -179,7 +197,7 @@ function memberRow(page, name) {
   log('Feedback erfasst');
 
   // Pfingsten: „Aus dem letzten Mal“ → Aufgabe; Übernehmen
-  await lena.goto(`${BASE}/aktionen/${pfingsten}`);
+  await lena.goto(`${BASE}/aktionen/${pfingsten}?tab=planung`);
   await lena.getByText('Aus dem letzten Mal').waitFor();
   const item = lena.locator('li', { hasText: 'Mehr Kaffee einplanen' });
   await item.getByRole('button', { name: 'Als Aufgabe' }).click();
@@ -194,15 +212,18 @@ function memberRow(page, name) {
   await lena.getByText(/Übernommen: 3 Zeitslots, 2 Aufgaben .*Planungsteam/).waitFor();
   await lena.goto(`${BASE}/aktionen/${pfingsten}?tab=zeitplan`);
   await slotCard('Aufbau').getByText('08:00–10:00').waitFor();
-  await lena.goto(`${BASE}/aktionen/${pfingsten}?tab=aufgaben`);
-  for (const t of ['Plakat drucken', 'Waffeleisen leihen', 'Mehr Kaffee einplanen']) await lena.getByText(t, { exact: true }).first().waitFor();
-  await lena.getByText('So., 2. Mai').first().waitFor(); // 16.05. − 14 Tage (relativ übernommen)
+  await lena.goto(`${BASE}/aktionen/${pfingsten}?tab=planung`);
+  // Aus Ostern übernommene Aufgaben-Blöcke zeigen auf die neuen Aufgaben; „Mehr Kaffee“ steht unter „Weitere Aufgaben“
+  for (const t of ['Plakat drucken', 'Waffeleisen leihen']) await lena.locator('[data-task-block]', { hasText: t }).waitFor();
+  await lena.locator('section[aria-label="Weitere Aufgaben"]').getByText('Mehr Kaffee einplanen').waitFor();
+  await lena.locator('[data-task-block]', { hasText: 'Plakat drucken' }).getByText('So., 2. Mai').waitFor(); // 16.05. − 14 Tage (relativ übernommen)
+  if (await lena.locator('[data-task-block]', { hasText: 'Plakat drucken' }).getByText('erledigt').count()) throw new Error('Übernommene Aufgabe nicht offen');
   log('Von Ostern übernommen: Zeitplan, Aufgaben (relativ), Planungsteam');
 
   // Fremde Organisation
   const nora = await (await b.newContext()).newPage();
   await login(nora, 'nora@test.de', 'Nora-Passwort-1');
-  for (const tab of ['team', 'zeitplan', 'aufgaben', 'feedback']) {
+  for (const tab of ['team', 'zeitplan', 'planung', 'feedback']) {
     await nora.goto(`${BASE}/aktionen/${ostern}?tab=${tab}`);
     await nora.getByText('Seite nicht gefunden').waitFor();
   }

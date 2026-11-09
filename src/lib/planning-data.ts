@@ -256,7 +256,7 @@ export async function copySources(user: OrgUser, action: { id: string; seriesId:
         slots: sql<number>`(select count(*)::int from public.action_slots s where s.action_id = "actions"."id")`,
         tasks: sql<number>`(select count(*)::int from public.tasks t where t.action_id = "actions"."id")`,
         planners: sql<number>`(select count(*)::int from public.action_planners p where p.action_id = "actions"."id")`,
-        hasNotes: sql<boolean>`${a.notesText} <> ''`,
+        hasNotes: sql<boolean>`(${a.notesText} <> '' or ${a.notes}::text like '%"type": "task"%' or ${a.notes}::text like '%"type":"task"%')`,
       })
       .from(a)
       .where(and(eq(a.seriesId, action.seriesId!), ne(a.id, action.id)))
