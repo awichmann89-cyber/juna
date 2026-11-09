@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 export function Segmented({ items, active }: { items: { key: string; label: string; href: string }[]; active: string }) {
   return (
-    <nav className="inline-flex max-w-full overflow-x-auto rounded-xl bg-surface-2 p-1" aria-label="Ansicht">
+    <nav className="inline-flex w-fit max-w-full overflow-x-auto scrollbar-none rounded-xl bg-surface-2 p-1" aria-label="Ansicht">
       {items.map((i) => (
         <Link
           key={i.key}

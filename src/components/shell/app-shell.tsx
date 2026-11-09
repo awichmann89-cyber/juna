@@ -98,7 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-5xl px-4 pt-6 pb-28 md:px-8 md:pt-10 md:pb-12">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] px-4 pt-6 pb-28 md:px-8 md:pt-10 md:pb-12">{children}</main>
       </div>
 
       <Suspense fallback={null}>

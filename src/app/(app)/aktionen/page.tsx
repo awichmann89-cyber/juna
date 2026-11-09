@@ -101,7 +101,7 @@ async function Actions({ searchParams }: { searchParams: PageProps<"/aktionen">[
           items={views.map((v) => ({ key: v.key, label: v.label, href: href({ ...base, ansicht: v.key === "kommend" ? undefined : v.key, monat: undefined }) }))}
         />
         {series.filter((s) => !s.archived || s.id === reihe).length > 0 && (
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" aria-label="Nach Reihe filtern">
+          <div className="-mx-1 flex gap-2 overflow-x-auto scrollbar-none px-1 pb-1" aria-label="Nach Reihe filtern">
             <Link
               href={href({ ...base, reihe: undefined })}
               className={cn(

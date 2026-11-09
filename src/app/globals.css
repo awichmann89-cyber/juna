@@ -127,3 +127,12 @@ body {
 .juna-editor [data-prev-level="3"] {
   --prev-level: 1.15em;
 }
+
+/* Horizontal scrollbare Leisten (Tabs, Filter) ohne sichtbaren Scrollbalken – Wischen/Shift+Mausrad funktionieren weiter */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

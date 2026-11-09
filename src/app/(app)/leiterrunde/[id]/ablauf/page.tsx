@@ -134,7 +134,7 @@ async function Walkthrough({
               {index + 1}/{agenda.length}
             </span>
           </div>
-          <ol className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 lg:flex-col lg:overflow-visible">
+          <ol className="-mx-1 flex gap-1 overflow-x-auto scrollbar-none px-1 pb-1 lg:flex-col lg:overflow-visible">
             {agenda.map((a, i) => (
               <li key={a.id} className="shrink-0 lg:shrink">
                 <Link
@@ -196,7 +196,7 @@ async function Walkthrough({
 
           {action && (
             <div>
-              <nav className="-mx-1 mb-4 flex gap-1 overflow-x-auto border-b border-border px-1" aria-label="Bereiche">
+              <nav className="-mx-1 mb-4 flex gap-1 overflow-x-auto scrollbar-none border-b border-border px-1" aria-label="Bereiche">
                 {areas.map((a) => (
                   <Link
                     key={a.key}

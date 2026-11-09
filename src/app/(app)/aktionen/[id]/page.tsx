@@ -255,9 +255,9 @@ async function ActionPage({
         </div>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0">
-          <nav className="-mx-1 mb-4 flex gap-1 overflow-x-auto border-b border-border px-1" aria-label="Bereiche der Aktion">
+          <nav className="-mx-1 mb-4 flex gap-1 overflow-x-auto scrollbar-none border-b border-border px-1" aria-label="Bereiche der Aktion">
             {tabs.map((t) => (
               <Link
                 key={t.key}
@@ -267,7 +267,7 @@ async function ActionPage({
                 className={cn(
                   "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold",
                   t.key === tab ? "border-primary text-primary" : "border-transparent text-muted hover:text-fg",
-                  "mobileOnly" in t && "lg:hidden",
+                  "mobileOnly" in t && "2xl:hidden",
                 )}
               >
                 <t.icon className="size-4" aria-hidden /> {t.label}
@@ -281,7 +281,7 @@ async function ActionPage({
           {tabContent}
         </div>
 
-        <aside className="hidden lg:block">
+        <aside className="hidden 2xl:block">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-muted">
             <History className="size-4" aria-hidden /> Historie der Reihe
           </h2>

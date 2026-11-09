@@ -102,8 +102,11 @@ async function waitSaved(page) {
   await lena.fill('#title', 'Kuchenverkauf Pfingsten');
   await lena.fill('#date', '2027-05-16');
   await Promise.all([lena.waitForURL(/\/aktionen\/[0-9a-f-]{36}$/), lena.getByRole('button', { name: 'Aktion anlegen' }).click()]);
-  const aside = lena.locator('aside');
-  await aside.getByText('Kuchenverkauf Ostern').waitFor();
+  // Unter 1536 px steht die Historie im Tab „Historie“, ab 2xl in der Seitenleiste
+  await lena.getByRole('link', { name: 'Historie' }).click();
+  await lena.waitForURL(/tab=historie/);
+  const aside = lena.locator('main li', { hasText: 'Kuchenverkauf Ostern' }).first();
+  await aside.getByRole('link', { name: 'Kuchenverkauf Ostern' }).first().waitFor();
   await aside.getByText('ABLAUF').waitFor();
   await aside.getByText('☐ Plakat drucken').waitFor();
   log('Neue Durchführung: Vorschläge übernommen, Historie zeigt Notizen vom letzten Mal');
