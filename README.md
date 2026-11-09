@@ -15,7 +15,15 @@ Der vollständige Projektplan liegt im claude.ai-Projekt „juna“ (`projektpla
 - Profil inkl. persönlicher Erinnerungszeit (15-Minuten-Raster)
 - Responsive App-Shell (Desktop-Sidebar, mobile Bottom-Navigation), PWA-Manifest + App-Icons
 - Rate-Limiting (Login, Passwort-Reset, Anträge) instanzübergreifend in der Datenbank
-- Tests: RLS-Isolation (`tests/db`), End-to-End-Durchlauf (`tests/e2e`)
+- Tests: RLS-Isolation (`tests/db`), Unit-Tests (`tests/unit`), End-to-End-Durchläufe (`tests/e2e`)
+
+## Stand: Phase 2 – Aktionen
+
+- Aktionen anlegen/bearbeiten/löschen (Löschen nur Admins): Titel, Status, Datum (auch mehrtägig), Uhrzeiten, Ort
+- Ansichten: Kommend, Kalender (Monatsraster, mobil als Liste), Vergangen, Ideen (ohne Termin); Filter nach Reihe
+- Aktionsreihen (auch mehrmals im Jahr): Farbe, Beschreibung, Archivieren; „Neue Durchführung“ schlägt Titel, Ort und Uhrzeiten vom letzten Mal vor
+- Detailseite mit Tabs (Notizen aktiv; Zeitplan, Team, Aufgaben, Feedback, Dateien folgen) und „Historie der Reihe“ mit den Notizen früherer Durchführungen
+- Notiz-Editor (BlockNote, deutsch): Markdown-Shortcuts, Slash-Menü, Formatierungsleiste, Checklisten, Tabellen; Autosave mit Konflikterkennung, wenn zwei Personen gleichzeitig schreiben; Klartext-Ableitung für Suche und Kalender-Export
 
 ## Einrichtung
 
@@ -91,6 +99,7 @@ Migrationen laufen **automatisch bei jedem Push**: `vercel.json` setzt den Build
 
 ```bash
 TEST_DATABASE_URL=postgresql://... npm run test:db
+npm run test:unit
 ```
 
 **End-to-End** – Antrag → Freigabe → Einladung → Passwort → Mitglied einladen → Rechte → Deaktivieren → Reset → Rate-Limit. Gegen eine leere Datenbank, ohne `RESEND_API_KEY`:
@@ -100,6 +109,7 @@ npx playwright install chromium     # einmalig
 npm run build && npm start > /tmp/juna.log 2>&1 &
 npm run bootstrap:superadmin -- apps@alw-mediaworks.de     # Link kopieren
 E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/flow.mjs "<Link>"
+E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/phase2.mjs   # danach, gleiche DB
 ```
 
 ## Sicherheitsprinzipien

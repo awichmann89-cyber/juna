@@ -80,6 +80,24 @@ describe.skipIf(!url)("RLS / Mandantentrennung", () => {
     );
   });
 
+  // --- Phase 2: Aktionen / Reihen ---------------------------------------
+  const seriesA = "aaaaaaaa-1111-0000-0000-000000000001";
+  const seriesB = "bbbbbbbb-1111-0000-0000-000000000001";
+  const actionA = "aaaaaaaa-2222-0000-0000-000000000001";
+  const actionB = "bbbbbbbb-2222-0000-0000-000000000001";
+  beforeAll(async () => {
+    await db.query(
+      `insert into public.action_series (id, org_id, name) values ($1, $2, 'Kuchenverkauf'), ($3, $4, 'Kuchenverkauf')`,
+      [seriesA, ids.orgA, seriesB, ids.orgB],
+    );
+    await db.query(
+      `insert into public.actions (id, org_id, series_id, title, date) values
+        ($1, $2, $3, 'Kuchenverkauf Ostern', '2027-04-04'),
+        ($4, $5, $6, 'Geheime Aktion B', '2027-05-01')`,
+      [actionA, ids.orgA, seriesA, actionB, ids.orgB, seriesB],
+    );
+  });
+
   afterAll(async () => {
     await db?.end();
   });
@@ -227,5 +245,92 @@ describe.skipIf(!url)("RLS / Mandantentrennung", () => {
         ids.memberB,
       ]),
     ).rejects.toThrow(/foreign key/);
+  });
+
+  it("Aktionen und Reihen: nur die der eigenen Organisation sichtbar", async () => {
+    const actions = await asUser(ids.memberA, async (c) => (await c.query("select id from public.actions")).rows);
+    expect(actions.map((r) => r.id)).toEqual([actionA]);
+    const series = await asUser(ids.memberA, async (c) => (await c.query("select id from public.action_series")).rows);
+    expect(series.map((r) => r.id)).toEqual([seriesA]);
+    const direct = await asUser(ids.memberA, async (c) =>
+      (await c.query("select * from public.actions where id = $1", [actionB])).rows,
+    );
+    expect(direct).toHaveLength(0);
+  });
+
+  it("Mitglied legt Aktionen nur in der eigenen Organisation an (created_by automatisch)", async () => {
+    const row = await asUser(ids.memberA, async (c) =>
+      (await c.query(
+        `insert into public.actions (org_id, title, date) values ($1, 'Waffelessen', '2027-02-14') returning created_by`,
+        [ids.orgA],
+      )).rows[0],
+    );
+    expect(row.created_by).toBe(ids.memberA);
+    await asUser(ids.memberA, async (c) => {
+      await expectDenied(
+        c.query(`insert into public.actions (org_id, title, date) values ($1, 'Fremd', '2027-02-14')`, [ids.orgB]),
+      );
+    });
+  });
+
+  it("Aktion kann nicht mit einer Reihe einer fremden Organisation verknüpft werden", async () => {
+    await asUser(ids.memberA, async (c) => {
+      await expect(
+        c.query(`insert into public.actions (org_id, series_id, title, date) values ($1, $2, 'Fremde Reihe', '2027-01-01')`, [
+          ids.orgA,
+          seriesB,
+        ]),
+      ).rejects.toThrow(/foreign key|permission denied/);
+    });
+  });
+
+  it("Mitglied bearbeitet Aktionen der eigenen Org, aber nicht org_id oder fremde", async () => {
+    const own = await asUser(ids.memberA, async (c) =>
+      (await c.query(`update public.actions set title = 'Kuchenverkauf Ostern 2027' where id = $1 returning updated_by`, [actionA])).rows,
+    );
+    expect(own).toHaveLength(1);
+    expect(own[0].updated_by).toBe(ids.memberA);
+    const foreign = await asUser(ids.memberA, async (c) =>
+      (await c.query(`update public.actions set title = 'Hack' where id = $1`, [actionB])).rowCount,
+    );
+    expect(foreign).toBe(0);
+    await asUser(ids.memberA, async (c) => {
+      await expectDenied(c.query(`update public.actions set org_id = $2 where id = $1`, [actionA, ids.orgB]));
+    });
+  });
+
+  it("nur Admins löschen Aktionen und Reihen", async () => {
+    const member = await asUser(ids.memberA, async (c) =>
+      (await c.query(`delete from public.actions where id = $1`, [actionA])).rowCount,
+    );
+    expect(member).toBe(0);
+    const admin = await asUser(ids.adminA, async (c) =>
+      (await c.query(`delete from public.actions where id = $1`, [actionA])).rowCount,
+    );
+    expect(admin).toBe(1);
+    const foreign = await asUser(ids.adminA, async (c) =>
+      (await c.query(`delete from public.actions where id = $1`, [actionB])).rowCount,
+    );
+    expect(foreign).toBe(0);
+  });
+
+  it("Löschen einer Reihe behält die Aktionen (series_id wird null)", async () => {
+    const remaining = await asUser(ids.adminA, async (c) => {
+      await c.query(`delete from public.action_series where id = $1`, [seriesA]);
+      return (await c.query(`select series_id from public.actions where id = $1`, [actionA])).rows;
+    });
+    expect(remaining).toEqual([{ series_id: null }]);
+  });
+
+  it("Aktion ohne Datum nur als Idee", async () => {
+    await asUser(ids.memberA, async (c) => {
+      await expect(
+        c.query(`insert into public.actions (org_id, title, status) values ($1, 'Ohne Datum', 'geplant')`, [ids.orgA]),
+      ).rejects.toThrow(/actions_date_required/);
+    });
+    const idea = await asUser(ids.memberA, async (c) =>
+      (await c.query(`insert into public.actions (org_id, title, status) values ($1, 'Kinderdisco?', 'idee')`, [ids.orgA])).rowCount,
+    );
+    expect(idea).toBe(1);
   });
 });

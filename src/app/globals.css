@@ -89,3 +89,41 @@ body {
 .pt-safe {
   padding-top: env(safe-area-inset-top);
 }
+
+/* BlockNote: an juna angleichen */
+.juna-editor .bn-editor {
+  padding-inline: 2.75rem 0.75rem;
+  font-size: 16px;
+  line-height: 1.6;
+}
+@media (min-width: 640px) {
+  .juna-editor .bn-editor {
+    padding-inline: 3.25rem 1.5rem;
+  }
+}
+.juna-editor .bn-container {
+  --bn-font-family: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
+}
+.juna-editor .bn-default-styles,
+.juna-editor .bn-editor {
+  font-family: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
+}
+/* Überschriften in Notizen etwas zurückhaltender als BlockNote-Standard */
+.juna-editor [data-content-type="heading"][data-level="1"] {
+  --level: 1.75em;
+}
+.juna-editor [data-content-type="heading"][data-level="2"] {
+  --level: 1.4em;
+}
+.juna-editor [data-content-type="heading"][data-level="3"] {
+  --level: 1.15em;
+}
+.juna-editor [data-prev-level="1"] {
+  --prev-level: 1.75em;
+}
+.juna-editor [data-prev-level="2"] {
+  --prev-level: 1.4em;
+}
+.juna-editor [data-prev-level="3"] {
+  --prev-level: 1.15em;
+}

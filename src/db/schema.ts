@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  date,
+  foreignKey,
   integer,
   jsonb,
   pgEnum,
@@ -150,6 +152,59 @@ export const platformSettings = pgTable("platform_settings", {
   updatedAt: ts("updated_at").notNull().defaultNow(),
   updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
 });
+
+// --- Phase 2: Aktionen ----------------------------------------------------
+export const actionStatus = pgEnum("action_status", ["idee", "geplant", "in_planung", "durchgefuehrt", "abgeschlossen"]);
+
+export const seriesColors = ["orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "gray"] as const;
+
+export const actionSeries = pgTable("action_series", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  color: text("color", { enum: seriesColors }).notNull().default("orange"),
+  archived: boolean("archived").notNull().default(false),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
+
+export const actions = pgTable(
+  "actions",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seriesId: uuid("series_id"),
+    title: text("title").notNull(),
+    status: actionStatus("status").notNull().default("geplant"),
+    date: date("date", { mode: "string" }),
+    endDate: date("end_date", { mode: "string" }),
+    startTime: time("start_time"),
+    endTime: time("end_time"),
+    location: text("location"),
+    notes: jsonb("notes").$type<unknown[]>(),
+    notesText: text("notes_text").notNull().default(""),
+    notesVersion: integer("notes_version").notNull().default(0),
+    notesUpdatedAt: ts("notes_updated_at"),
+    notesUpdatedBy: text("notes_updated_by"),
+    createdBy: text("created_by"),
+    updatedBy: text("updated_by"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({ columns: [t.seriesId, t.orgId], foreignColumns: [actionSeries.id, actionSeries.orgId] }),
+  ],
+);
+
+export type ActionStatus = (typeof actionStatus.enumValues)[number];
+export type SeriesColor = (typeof seriesColors)[number];
 
 export type OrgRole = (typeof orgRole.enumValues)[number];
 export type MemberStatus = (typeof memberStatus.enumValues)[number];

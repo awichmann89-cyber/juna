@@ -13,4 +13,4 @@
 - User-Zugriffe über `withUser()`, privilegierte über `adminDb()` nur nach Prüfung im DAL (`src/lib/auth.ts`).
 
 ## Prüfen vor dem Commit
-- `npm run typecheck`, `npm run lint`, `npm run test:db` (leere Test-DB), bei Auth-/Flow-Änderungen `tests/e2e/flow.mjs`.
+- `npm run typecheck`, `npm run lint`, `npm run test:unit`, `npm run test:db` (leere Test-DB), bei Flow-Änderungen `tests/e2e/flow.mjs` + `tests/e2e/phase2.mjs` (frische DB).
