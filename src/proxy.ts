@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
-const PUBLIC_PATHS = ["/", "/login", "/registrieren", "/passwort-vergessen", "/passwort-setzen", "/datenschutz", "/impressum"];
+const PUBLIC_PATHS = ["/", "/login", "/registrieren", "/passwort-vergessen", "/passwort-setzen", "/datenschutz", "/impressum", "/cal"];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => (p === "/" ? pathname === "/" : pathname === p || pathname.startsWith(`${p}/`)));

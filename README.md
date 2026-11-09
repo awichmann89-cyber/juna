@@ -45,6 +45,15 @@ Der vollständige Projektplan liegt im claude.ai-Projekt „juna“ (`projektpla
 - **Dateien** pro Aktion (privater Vercel-Blob-Store): Upload bis 50 MB direkt aus dem Browser, Gruppen (z. B. „Plakat“), Bildvorschau, Download nur angemeldet über `/api/dateien/<id>`; Löschen durch Hochladende oder Admins; HTML/SVG sind gesperrt
 - **Gemeinsames Bearbeiten in Echtzeit** (Liveblocks) für Notizen und Protokoll, inkl. Anzeige, wer gerade mitschreibt. Ohne `LIVEBLOCKS_SECRET_KEY` bleibt es beim Autosave mit Konflikterkennung.
 
+## Stand: Phase 5 – Kalender-Abos
+
+- Unter **Einstellungen → Kalender abonnieren** erzeugt jede*r eigene Abo-Links („Abonnieren“ öffnet `webcal://` auf iPhone/Mac, „Link kopieren“ für Google/Outlook)
+  - **Mein Kalender** (`/cal/<token>/personal.ics`): eigene Zeitslots (abgeleitet aus Teilnahme, Fenster und Overrides; „vielleicht“ als vorläufig mit „(?)“), Einsätze ohne Zeitplan, Deadlines der eigenen offenen Aufgaben (ganztägig, nicht „belegt“)
+  - **Organisation** (`/cal/<token>/org.ics`): alle datierten Aktionen als Ganztagstermine mit Zeitplan, Team, Planungsteam und Notizen als Klartext; Leiterrundentreffen mit Agenda
+- Zeitraum: 180 Tage zurück bis 2 Jahre voraus; Zeiten in UTC, Ganztagstermine als Datum; stabile UIDs, SEQUENCE aus dem Änderungszeitpunkt
+- Token = Feed-ID + HMAC (Schlüssel aus `BETTER_AUTH_SECRET`, nicht in der DB); „Links zurücksetzen“ macht alte Links ungültig. Deaktivierte Mitglieder und gesperrte Organisationen bekommen 404. Rate-Limit pro IP und pro Feed.
+- Hinweis: Google Kalender aktualisiert Abos nur etwa alle 12–24 Stunden, iOS lässt sich auf 15 Minuten stellen.
+
 ## Einrichtung
 
 ### 1. Neon
@@ -140,6 +149,7 @@ E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/flo
 E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/phase2.mjs   # danach, gleiche DB
 E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/phase3.mjs   # danach, gleiche DB
 DATABASE_URL=... E2E_BASE_URL=http://localhost:3000 node tests/e2e/phase4.mjs   # Server mit JUNA_LOCAL_STORAGE_DIR starten
+E2E_BASE_URL=http://localhost:3000 node tests/e2e/phase5.mjs
 ```
 
 ## Sicherheitsprinzipien

@@ -519,4 +519,31 @@ describe.skipIf(!url)("RLS / Mandantentrennung", () => {
       await db.query(`delete from public.actions where id = $1`, [actA]);
     }
   });
+  it("Kalender-Feeds: nur der eigene, nicht für andere anlegbar", async () => {
+    await db.query(`insert into public.calendar_feeds (org_id, user_id) values ($1, $2)`, [ids.orgA, ids.adminA]);
+    try {
+      const seen = await asUser(ids.memberA, async (c) => (await c.query(`select user_id from public.calendar_feeds`)).rows);
+      expect(seen).toEqual([]);
+      const own = await asUser(ids.adminA, async (c) => (await c.query(`select user_id from public.calendar_feeds`)).rows);
+      expect(own).toEqual([{ user_id: ids.adminA }]);
+      // Für jemand anderen anlegen oder in fremder Org: verboten
+      await asUser(ids.memberA, (c) =>
+        expectDenied(c.query(`insert into public.calendar_feeds (org_id, user_id) values ($1, $2)`, [ids.orgA, ids.adminA])),
+      );
+      await asUser(ids.memberA, (c) =>
+        expectDenied(c.query(`insert into public.calendar_feeds (org_id, user_id) values ($1, $2)`, [ids.orgB, ids.memberA])),
+      );
+      // Eigenen anlegen geht; fremden löschen nicht
+      const created = await asUser(ids.memberA, async (c) =>
+        (await c.query(`insert into public.calendar_feeds (org_id, user_id) values ($1, $2) returning id`, [ids.orgA, ids.memberA])).rowCount,
+      );
+      expect(created).toBe(1);
+      const deleted = await asUser(ids.memberA, async (c) => (await c.query(`delete from public.calendar_feeds where user_id = $1`, [ids.adminA])).rowCount);
+      expect(deleted).toBe(0);
+      // last_accessed_at darf die App-Rolle nicht setzen
+      await asUser(ids.adminA, (c) => expectDenied(c.query(`update public.calendar_feeds set last_accessed_at = now()`)));
+    } finally {
+      await db.query(`delete from public.calendar_feeds`);
+    }
+  });
 });

@@ -391,6 +391,14 @@ export const actionFiles = pgTable("action_files", {
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
+export const calendarFeeds = pgTable("calendar_feeds", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: uuid("org_id").notNull(),
+  userId: text("user_id").notNull().unique(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  lastAccessedAt: ts("last_accessed_at"),
+});
+
 export type MeetingType = (typeof meetingType.enumValues)[number];
 export type MeetingStatus = (typeof meetingStatus.enumValues)[number];
 export type AgendaKind = (typeof agendaKind.enumValues)[number];
