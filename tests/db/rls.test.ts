@@ -333,4 +333,97 @@ describe.skipIf(!url)("RLS / Mandantentrennung", () => {
     );
     expect(idea).toBe(1);
   });
+
+  // --- Phase 3: Planung --------------------------------------------------
+  it("Planung: Zeitplan, Teilnahme, Aufgaben, Feedback nur innerhalb der Organisation", async () => {
+    // Fixture als Owner: Aktion in A (ohne Reihe), Aktion B existiert schon
+    const actA = "aaaaaaaa-3333-0000-0000-000000000001";
+    await db.query(`insert into public.actions (id, org_id, title, date) values ($1, $2, 'Zeltlager', '2027-07-10')`, [actA, ids.orgA]);
+    try {
+      // Mitglied A legt Slot, Teilnahme, Aufgabe, Feedback an
+      const res = await asUser(ids.memberA, async (c) => {
+        const slot = (await c.query(
+          `insert into public.action_slots (org_id, action_id, title, starts_at, ends_at) values ($1, $2, 'Aufbau', '2027-07-10 09:00', '2027-07-10 11:00') returning id`,
+          [ids.orgA, actA],
+        )).rows[0].id;
+        await c.query(`insert into public.action_participants (org_id, action_id, user_id, status) values ($1, $2, $3, 'dabei')`, [ids.orgA, actA, ids.adminA]);
+        await c.query(`update public.action_participants set status = 'vielleicht' where action_id = $1 and user_id = $2`, [actA, ids.adminA]);
+        const task = (await c.query(
+          `insert into public.tasks (org_id, action_id, title, due_days_before) values ($1, $2, 'Plakat drucken', 14) returning id, created_by`,
+          [ids.orgA, actA],
+        )).rows[0];
+        await c.query(`insert into public.task_assignees (org_id, task_id, user_id) values ($1, $2, $3)`, [ids.orgA, task.id, ids.memberA]);
+        const fb = (await c.query(
+          `insert into public.feedback (org_id, action_id, kind, text) values ($1, $2, 'naechstes_mal', 'Mehr Kuchen') returning author_id`,
+          [ids.orgA, actA],
+        )).rows[0];
+        const hist = (await c.query(
+          `select old_status, new_status, changed_by from public.participation_history where action_id = $1 order by id`,
+          [actA],
+        )).rows;
+        return { slot, task, fb, hist };
+      });
+      expect(res.task.created_by).toBe(ids.memberA);
+      expect(res.fb.author_id).toBe(ids.memberA);
+      expect(res.hist).toEqual([
+        { old_status: null, new_status: "dabei", changed_by: ids.memberA },
+        { old_status: "dabei", new_status: "vielleicht", changed_by: ids.memberA },
+      ]);
+
+      // Fremde Organisation: weder sehen noch verknüpfen
+      await db.query(`insert into public.action_slots (org_id, action_id, title, starts_at, ends_at) values ($1, $2, 'Slot A', '2027-07-10 12:00', '2027-07-10 13:00')`, [ids.orgA, actA]);
+      const seen = await asUser(ids.memberB, async (c) => ({
+        slots: (await c.query(`select * from public.action_slots where action_id = $1`, [actA])).rows,
+        hist: (await c.query(`select * from public.participation_history where action_id = $1`, [actA])).rows,
+      }));
+      expect(seen.slots).toHaveLength(0);
+      expect(seen.hist).toHaveLength(0);
+      // B kann sich nicht in eine Aktion von A eintragen (RLS bzw. org-sicherer Fremdschlüssel)
+      await asUser(ids.memberB, async (c) => {
+        await expect(
+          c.query(`insert into public.action_participants (org_id, action_id, user_id, status) values ($1, $2, $3, 'dabei')`, [ids.orgB, actA, ids.memberB]),
+        ).rejects.toThrow(/foreign key|permission denied|row-level security/);
+      });
+      await asUser(ids.memberB, async (c) => {
+        await expectDenied(
+          c.query(`insert into public.action_participants (org_id, action_id, user_id, status) values ($1, $2, $3, 'dabei')`, [ids.orgA, actA, ids.memberB]),
+        );
+      });
+      // Org A kann kein Mitglied aus B eintragen (FK user/org)
+      await asUser(ids.memberA, async (c) => {
+        await expect(
+          c.query(`insert into public.action_participants (org_id, action_id, user_id, status) values ($1, $2, $3, 'dabei')`, [ids.orgA, actA, ids.memberB]),
+        ).rejects.toThrow(/foreign key/);
+      });
+      // Historie ist nur lesbar
+      await asUser(ids.memberA, async (c) => {
+        await expectDenied(c.query(`delete from public.participation_history where action_id = $1`, [actA]));
+      });
+    } finally {
+      // Kaskade inkl. Teilnahmen/Historie darf beim Löschen der Aktion nicht scheitern
+      await db.query(`delete from public.actions where id = $1`, [actA]);
+    }
+  });
+
+  it("Feedback: nur Autor*in oder Admin ändern/löschen; Autor nicht fälschbar", async () => {
+    const actA = "aaaaaaaa-3333-0000-0000-000000000002";
+    await db.query(`insert into public.actions (id, org_id, title, date) values ($1, $2, 'Kinderkino', '2027-03-01')`, [actA, ids.orgA]);
+    const fbId = (await db.query(
+      `insert into public.feedback (org_id, action_id, kind, text, author_id) values ($1, $2, 'gut', 'Toller Film', $3) returning id`,
+      [ids.orgA, actA, ids.adminA],
+    )).rows[0].id;
+    try {
+      const byMember = await asUser(ids.memberA, async (c) => (await c.query(`delete from public.feedback where id = $1`, [fbId])).rowCount);
+      expect(byMember).toBe(0);
+      await asUser(ids.memberA, async (c) => {
+        await expectDenied(
+          c.query(`insert into public.feedback (org_id, action_id, kind, text, author_id) values ($1, $2, 'gut', 'Fake', $3)`, [ids.orgA, actA, ids.adminA]),
+        );
+      });
+      const byAdmin = await asUser(ids.adminA, async (c) => (await c.query(`update public.feedback set text = 'Sehr toller Film' where id = $1`, [fbId])).rowCount);
+      expect(byAdmin).toBe(1);
+    } finally {
+      await db.query(`delete from public.actions where id = $1`, [actA]);
+    }
+  });
 });

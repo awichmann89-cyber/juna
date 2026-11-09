@@ -24,6 +24,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/feedback";
 import { formatActionDate, formatActionTime, todayIso } from "@/lib/action-format";
 import { getAction, seriesHistory, type ActionDetail } from "@/lib/actions-data";
+import { CopyPanelBox } from "@/components/planning/copy-panel";
+import { FeedbackTab } from "@/components/planning/feedback-tab";
+import { LastTime } from "@/components/planning/last-time";
+import { ScheduleTab } from "@/components/planning/schedule-tab";
+import { TasksTab } from "@/components/planning/tasks-tab";
+import { TeamTab } from "@/components/planning/team-tab";
+import {
+  actionFeedback,
+  actionTasks,
+  copySources,
+  getPlanning,
+  lastTimeItems,
+  orgMembers,
+  planningCounts,
+} from "@/lib/planning-data";
 import { requireOrgUser, type OrgUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -31,10 +46,10 @@ export const metadata: Metadata = { title: "Aktion" };
 
 const tabs = [
   { key: "notizen", label: "Notizen", icon: ClipboardList },
-  { key: "zeitplan", label: "Zeitplan", icon: CalendarClock, phase: "Phase 3: Zeitslots mit Anwesenheitsfenstern" },
-  { key: "team", label: "Team", icon: Users, phase: "Phase 3: Teilnahme (dabei / vielleicht / nicht dabei) und Planungsteam" },
-  { key: "aufgaben", label: "Aufgaben", icon: ListChecks, phase: "Phase 3: Aufgaben mit Deadlines relativ zur Aktion" },
-  { key: "feedback", label: "Feedback", icon: MessageSquareHeart, phase: "Phase 3: Feedback „lief gut / verbessern / fürs nächste Mal“" },
+  { key: "zeitplan", label: "Zeitplan", icon: CalendarClock },
+  { key: "team", label: "Team", icon: Users },
+  { key: "aufgaben", label: "Aufgaben", icon: ListChecks },
+  { key: "feedback", label: "Feedback", icon: MessageSquareHeart },
   { key: "dateien", label: "Dateien", icon: FolderOpen, phase: "Phase 4: Plakate und andere Dateien" },
   { key: "historie", label: "Historie", icon: History, mobileOnly: true },
 ] as const;
@@ -106,6 +121,75 @@ async function ActionPage({
   if (!action) notFound();
   const tab: TabKey = tabs.some((t) => t.key === sp.tab) ? (sp.tab as TabKey) : "notizen";
   const activeTab = tabs.find((t) => t.key === tab)!;
+  const today = todayIso();
+  const counts = await planningCounts(user, action.id);
+  const badge: Partial<Record<TabKey, number>> = {
+    zeitplan: counts.slots,
+    team: counts.dabei,
+    aufgaben: counts.tasks_open,
+    feedback: counts.feedback,
+  };
+
+  let tabContent: React.ReactNode;
+  if (tab === "notizen") {
+    const [lastTime, sources] = await Promise.all([lastTimeItems(user, action), copySources(user, action)]);
+    const isEmpty = counts.slots === 0 && counts.tasks_open === 0 && !action.notesText;
+    tabContent = (
+      <>
+        <LastTime actionId={action.id} items={lastTime} />
+        <CopyPanelBox
+          actionId={action.id}
+          defaultOpen={isEmpty}
+          targetHasNotes={Boolean(action.notesText)}
+          sources={sources.map((src) => ({
+            id: src.id,
+            title: src.title,
+            dateLabel: formatActionDate(src, "short"),
+            slots: src.slots,
+            tasks: src.tasks,
+            planners: src.planners,
+            hasNotes: src.hasNotes,
+          }))}
+        />
+        <Card>
+          <CardContent className="pt-4">
+            <NotesEditorLoader
+              key={`${action.id}:${action.notesVersion}`}
+              actionId={action.id}
+              initialBlocks={action.notes}
+              initialVersion={action.notesVersion}
+              lastSavedLabel={
+                action.notesUpdatedAt
+                  ? `Zuletzt bearbeitet ${savedFmt.format(action.notesUpdatedAt)}${action.notesUpdatedByName ? ` von ${action.notesUpdatedByName}` : ""}`
+                  : undefined
+              }
+            />
+          </CardContent>
+        </Card>
+      </>
+    );
+  } else if (tab === "zeitplan" || tab === "team") {
+    const [planning, members] = await Promise.all([getPlanning(user, action.id), orgMembers(user)]);
+    tabContent =
+      tab === "zeitplan" ? (
+        <ScheduleTab action={action} planning={planning} members={members} />
+      ) : (
+        <TeamTab user={user} action={action} planning={planning} members={members} />
+      );
+  } else if (tab === "aufgaben") {
+    const [tasks, members] = await Promise.all([actionTasks(user, action.id, action.date), orgMembers(user)]);
+    tabContent = <TasksTab action={action} tasks={tasks} members={members} today={today} />;
+  } else if (tab === "feedback") {
+    tabContent = <FeedbackTab user={user} action={action} items={await actionFeedback(user, action.id)} />;
+  } else if (tab === "historie") {
+    tabContent = <SeriesHistory user={user} action={action} />;
+  } else {
+    tabContent = (
+      <EmptyState icon={<activeTab.icon className="size-6" />} title={`${activeTab.label} – kommt bald`}>
+        {"phase" in activeTab ? activeTab.phase : null}
+      </EmptyState>
+    );
+  }
 
   return (
     <>
@@ -173,33 +257,14 @@ async function ActionPage({
                 )}
               >
                 <t.icon className="size-4" aria-hidden /> {t.label}
+                {badge[t.key] ? (
+                  <span className="rounded-full bg-surface-2 px-1.5 text-xs font-bold text-muted">{badge[t.key]}</span>
+                ) : null}
               </Link>
             ))}
           </nav>
 
-          {tab === "notizen" ? (
-            <Card>
-              <CardContent className="pt-4">
-                <NotesEditorLoader
-                  key={`${action.id}:${action.notesVersion}`}
-                  actionId={action.id}
-                  initialBlocks={action.notes}
-                  initialVersion={action.notesVersion}
-                  lastSavedLabel={
-                    action.notesUpdatedAt
-                      ? `Zuletzt bearbeitet ${savedFmt.format(action.notesUpdatedAt)}${action.notesUpdatedByName ? ` von ${action.notesUpdatedByName}` : ""}`
-                      : undefined
-                  }
-                />
-              </CardContent>
-            </Card>
-          ) : tab === "historie" ? (
-            <SeriesHistory user={user} action={action} />
-          ) : (
-            <EmptyState icon={<activeTab.icon className="size-6" />} title={`${activeTab.label} – kommt bald`}>
-              {"phase" in activeTab ? activeTab.phase : null}
-            </EmptyState>
-          )}
+          {tabContent}
         </div>
 
         <aside className="hidden lg:block">

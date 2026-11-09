@@ -203,6 +203,136 @@ export const actions = pgTable(
   ],
 );
 
+// --- Phase 3: Planung --------------------------------------------------------
+export const participationStatus = pgEnum("participation_status", ["dabei", "vielleicht", "nicht_dabei"]);
+export const taskStatus = pgEnum("task_status", ["offen", "erledigt"]);
+export const feedbackKind = pgEnum("feedback_kind", ["gut", "verbessern", "naechstes_mal"]);
+export const followupResolution = pgEnum("followup_resolution", ["aufgabe", "beruecksichtigt"]);
+
+const localTs = (name: string) => timestamp(name, { mode: "string" });
+
+export const actionSlots = pgTable("action_slots", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: uuid("org_id").notNull(),
+  actionId: uuid("action_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  startsAt: localTs("starts_at").notNull(),
+  endsAt: localTs("ends_at").notNull(),
+  minPeople: integer("min_people"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+  updatedBy: text("updated_by"),
+});
+
+export const actionParticipants = pgTable(
+  "action_participants",
+  {
+    orgId: uuid("org_id").notNull(),
+    actionId: uuid("action_id").notNull(),
+    userId: text("user_id").notNull(),
+    status: participationStatus("status").notNull(),
+    presentFrom: localTs("present_from"),
+    presentUntil: localTs("present_until"),
+    updatedBy: text("updated_by"),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.actionId, t.userId] })],
+);
+
+export const slotOverrides = pgTable(
+  "slot_overrides",
+  {
+    orgId: uuid("org_id").notNull(),
+    slotId: uuid("slot_id").notNull(),
+    userId: text("user_id").notNull(),
+    present: boolean("present").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.slotId, t.userId] })],
+);
+
+export const participationHistory = pgTable("participation_history", {
+  id: bigint("id", { mode: "number" }).primaryKey(),
+  orgId: uuid("org_id").notNull(),
+  actionId: uuid("action_id").notNull(),
+  userId: text("user_id").notNull(),
+  changedBy: text("changed_by"),
+  oldStatus: participationStatus("old_status"),
+  newStatus: participationStatus("new_status"),
+  oldFrom: localTs("old_from"),
+  newFrom: localTs("new_from"),
+  oldUntil: localTs("old_until"),
+  newUntil: localTs("new_until"),
+  changedAt: ts("changed_at").notNull().defaultNow(),
+});
+
+export const actionPlanners = pgTable(
+  "action_planners",
+  {
+    orgId: uuid("org_id").notNull(),
+    actionId: uuid("action_id").notNull(),
+    userId: text("user_id").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.actionId, t.userId] })],
+);
+
+export const tasks = pgTable("tasks", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: uuid("org_id").notNull(),
+  actionId: uuid("action_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: taskStatus("status").notNull().default("offen"),
+  dueDaysBefore: integer("due_days_before"),
+  dueDate: date("due_date", { mode: "string" }),
+  doneAt: ts("done_at"),
+  doneBy: text("done_by"),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
+
+export const taskAssignees = pgTable(
+  "task_assignees",
+  {
+    orgId: uuid("org_id").notNull(),
+    taskId: uuid("task_id").notNull(),
+    userId: text("user_id").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.taskId, t.userId] })],
+);
+
+export const feedback = pgTable("feedback", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: uuid("org_id").notNull(),
+  actionId: uuid("action_id").notNull(),
+  kind: feedbackKind("kind").notNull(),
+  text: text("text").notNull(),
+  authorId: text("author_id"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+  updatedBy: text("updated_by"),
+});
+
+export const feedbackFollowups = pgTable(
+  "feedback_followups",
+  {
+    orgId: uuid("org_id").notNull(),
+    feedbackId: uuid("feedback_id").notNull(),
+    actionId: uuid("action_id").notNull(),
+    resolution: followupResolution("resolution").notNull(),
+    taskId: uuid("task_id"),
+    resolvedBy: text("resolved_by"),
+    resolvedAt: ts("resolved_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.feedbackId, t.actionId] })],
+);
+
+export type ParticipationStatus = (typeof participationStatus.enumValues)[number];
+export type FeedbackKind = (typeof feedbackKind.enumValues)[number];
+export type TaskStatus = (typeof taskStatus.enumValues)[number];
+
 export type ActionStatus = (typeof actionStatus.enumValues)[number];
 export type SeriesColor = (typeof seriesColors)[number];
 

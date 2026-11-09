@@ -8,6 +8,7 @@ import { schema, withUser } from "@/db";
 import { actionStatus, seriesColors } from "@/db/schema";
 import { requireOrgAdmin, requireOrgUser } from "@/lib/auth";
 import { blocksToText, MAX_NOTES_BYTES, sanitizeBlocks } from "@/lib/notes-text";
+import { shiftPlanning } from "@/lib/planning-shift";
 
 export type ActionFormState = {
   error?: string;
@@ -104,6 +105,13 @@ export async function saveAction(_prev: ActionFormState, formData: FormData): Pr
       };
 
       if (id) {
+        const [before] = await tx
+          .select({ date: schema.actions.date })
+          .from(schema.actions)
+          .where(and(eq(schema.actions.id, id), eq(schema.actions.orgId, user.org.id)));
+        if (!before) throw new Error("not-found");
+        // Datum verschoben → Zeitplan und Anwesenheitsfenster wandern mit
+        if (before.date && data.date && before.date !== data.date) await shiftPlanning(tx, id, before.date, data.date);
         const [row] = await tx
           .update(schema.actions)
           .set(data)

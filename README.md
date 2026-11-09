@@ -25,6 +25,16 @@ Der vollständige Projektplan liegt im claude.ai-Projekt „juna“ (`projektpla
 - Detailseite mit Tabs (Notizen aktiv; Zeitplan, Team, Aufgaben, Feedback, Dateien folgen) und „Historie der Reihe“ mit den Notizen früherer Durchführungen
 - Notiz-Editor (BlockNote, deutsch): Markdown-Shortcuts, Slash-Menü, Formatierungsleiste, Checklisten, Tabellen; Autosave mit Konflikterkennung, wenn zwei Personen gleichzeitig schreiben; Klartext-Ableitung für Suche und Kalender-Export
 
+## Stand: Phase 3 – Planung
+
+- **Zeitplan** pro Aktion (auch mehrtägig, über Mitternacht) mit Mindestbesetzung und Warnung bei Unterbesetzung
+- **Teilnahme** dabei / vielleicht / nicht dabei – jede*r kann für alle eintragen (Protokollführer), jede*r ändert die eigene; optionales **Anwesenheitsfenster** („komme ab“, „gehe um“), daraus automatische Zuordnung zu den Zeitslots, einzelne Slots manuell überschreibbar; Änderungsverlauf
+- **Planungsteam** (mehrere Personen) pro Aktion
+- **Aufgaben** mit mehreren Zuständigen, Deadline relativ („14 Tage vorher“, wandert mit dem Datum) oder fest; persönliche Liste „Meine Aufgaben“ (überfällig / heute / 7 Tage / später)
+- **Datum verschieben** verschiebt Zeitplan und Anwesenheitsfenster mit
+- **Feedback** (lief gut / verbessern / fürs nächste Mal); „Fürs nächste Mal“ erscheint bei der nächsten Durchführung der Reihe als **„Aus dem letzten Mal“** → als Aufgabe übernehmen oder abhaken
+- **Von früherer Durchführung übernehmen**: Zeitplan (aufs neue Datum verschoben), Aufgaben (offen, relativ), Planungsteam, Notizen
+
 ## Einrichtung
 
 ### 1. Neon
@@ -110,6 +120,7 @@ npm run build && npm start > /tmp/juna.log 2>&1 &
 npm run bootstrap:superadmin -- apps@alw-mediaworks.de     # Link kopieren
 E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/flow.mjs "<Link>"
 E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/phase2.mjs   # danach, gleiche DB
+E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/phase3.mjs   # danach, gleiche DB
 ```
 
 ## Sicherheitsprinzipien

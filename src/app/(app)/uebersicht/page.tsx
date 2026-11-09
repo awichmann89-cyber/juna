@@ -6,7 +6,9 @@ import { ActionList } from "@/components/actions/action-bits";
 import { LinkButton } from "@/components/ui/button";
 import { todayIso } from "@/lib/action-format";
 import { countIdeas, listActions } from "@/lib/actions-data";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { myTasks } from "@/lib/planning-data";
+import { TaskRow } from "@/components/planning/task-list";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { requireOrgUser } from "@/lib/auth";
 import { and, count, eq, ne } from "drizzle-orm";
@@ -26,9 +28,10 @@ function greeting() {
 async function Dashboard() {
   const user = await requireOrgUser();
   const today = todayIso();
-  const [upcoming, ideas] = await Promise.all([
+  const [upcoming, ideas, tasks] = await Promise.all([
     listActions(user, { view: "kommend", today, limit: 5 }),
     countIdeas(user),
+    myTasks(user),
   ]);
   const [{ members }] = await withUser(user.id, (tx) =>
     tx
@@ -84,8 +87,25 @@ async function Dashboard() {
             <CardTitle className="flex items-center gap-2 text-base">
               <ListChecks className="size-5 text-primary" aria-hidden /> Meine Aufgaben
             </CardTitle>
-            <CardDescription>Dir sind noch keine Aufgaben zugewiesen.</CardDescription>
           </CardHeader>
+          <CardContent className="px-1 pb-2">
+            {tasks.length === 0 ? (
+              <p className="px-4 pb-3 text-sm text-muted">Dir sind keine offenen Aufgaben zugewiesen.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {tasks.slice(0, 4).map((t) => (
+                  <TaskRow key={t.id} task={t} today={today} showAction />
+                ))}
+              </ul>
+            )}
+            {tasks.length > 0 && (
+              <div className="border-t border-border px-4 pt-3 text-sm">
+                <Link href="/aufgaben" className="font-semibold text-primary hover:underline">
+                  {tasks.length > 4 ? `Alle ${tasks.length} Aufgaben` : "Zur Aufgabenliste"}
+                </Link>
+              </div>
+            )}
+          </CardContent>
         </Card>
         <Card>
           <CardContent className="p-0">
