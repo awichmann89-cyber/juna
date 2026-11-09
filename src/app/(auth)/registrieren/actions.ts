@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { adminDb, schema } from "@/db";
 import { sendMail } from "@/lib/mail";
 import { env } from "@/lib/env";
-import { clientIp, consumeRateLimit } from "@/lib/rate-limit";
+import { clientIp, consumeRateLimit, formatRetryAfter } from "@/lib/rate-limit";
 
 export type ApplicationState = {
   ok?: boolean;
@@ -40,8 +40,12 @@ export async function submitApplication(_prev: ApplicationState, formData: FormD
     return { fieldErrors, values };
   }
   const data = { ...parsed.data, contactEmail: parsed.data.contactEmail.trim().toLowerCase() };
-  if (!(await consumeRateLimit(`apply:ip:${await clientIp()}`, 60 * 60, 5))) {
-    return { error: "Zu viele Anträge von deinem Netzwerk. Bitte versuche es später erneut.", values };
+  const limit = await consumeRateLimit(`apply:ip:${await clientIp()}`, 60 * 60, 5);
+  if (!limit.allowed) {
+    return {
+      error: `Zu viele Anträge von deinem Netzwerk. Bitte versuche es ${formatRetryAfter(limit.retryAfterSeconds)} erneut.`,
+      values,
+    };
   }
 
   const db = adminDb();

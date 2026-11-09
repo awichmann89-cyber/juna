@@ -8,7 +8,7 @@ import { adminDb, schema } from "@/db";
 import { auth } from "@/lib/better-auth";
 import { sendPasswordReset } from "@/lib/invitations";
 import { lookupPasswordToken } from "@/lib/password-token";
-import { clientIp, consumeRateLimit } from "@/lib/rate-limit";
+import { clientIp, consumeRateLimit, formatRetryAfter } from "@/lib/rate-limit";
 
 export type FormState = {
   error?: string;
@@ -70,10 +70,17 @@ export async function requestPasswordReset(_prev: FormState, formData: FormData)
   const values = { email: String(formData.get("email") ?? "") };
   if (!parsed.success) return { error: "Bitte eine gültige E-Mail-Adresse eingeben.", values };
   const ip = await clientIp();
-  const allowed =
-    (await consumeRateLimit(`reset:ip:${ip}`, 15 * 60, 10)) &&
-    (await consumeRateLimit(`reset:mail:${parsed.data.toLowerCase()}`, 60 * 60, 3));
-  if (!allowed) return { error: "Zu viele Anfragen. Bitte versuche es später erneut.", values };
+  for (const limit of [
+    await consumeRateLimit(`reset:ip:${ip}`, 15 * 60, 10),
+    await consumeRateLimit(`reset:mail:${parsed.data.toLowerCase()}`, 60 * 60, 3),
+  ]) {
+    if (!limit.allowed) {
+      return {
+        error: `Zu viele Anfragen. Bitte versuche es ${formatRetryAfter(limit.retryAfterSeconds)} erneut.`,
+        values,
+      };
+    }
+  }
   await sendPasswordReset(parsed.data);
   return { success: "Falls ein Konto mit dieser Adresse existiert, haben wir dir eine E-Mail mit einem Link geschickt." };
 }
