@@ -16,7 +16,7 @@ function createPool() {
   if (!connectionString) throw new Error("DATABASE_URL fehlt (siehe .env.example).");
   const pool = new Pool({
     connectionString: normalizeConnectionString(connectionString),
-    max: 5,
+    max: 10,
     idleTimeoutMillis: 10_000,
     keepAlive: true,
     connectionTimeoutMillis: 10_000,
@@ -78,9 +78,9 @@ export async function withUser<T>(userId: string, fn: (tx: Tx) => Promise<T>): P
   let started = false;
   const run = () =>
     adminDb().transaction(async (tx) => {
-      await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);
+      // User-Kontext und RLS-Rolle in einem Roundtrip (set_config('role', …, true) = SET LOCAL ROLE)
+      await tx.execute(sql`select set_config('app.user_id', ${userId}, true), set_config('role', 'juna_app', true)`);
       started = true;
-      await tx.execute(sql`set local role juna_app`);
       return fn(tx);
     });
   try {

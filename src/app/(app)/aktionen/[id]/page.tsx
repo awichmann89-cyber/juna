@@ -120,13 +120,14 @@ async function ActionPage({
   const user = await requireOrgUser();
   const { id } = await params;
   const sp = await searchParams;
-  const action = await getAction(user, id);
-  if (!action) notFound();
+  // Parallel: Aktion und Zähler (bei fremder/ungültiger ID liefern die Zähler einfach nichts)
+  const validId = /^[0-9a-f-]{36}$/i.test(id);
+  const [action, counts] = await Promise.all([getAction(user, id), validId ? planningCounts(user, id) : null]);
+  if (!action || !counts) notFound();
   const requested = typeof sp.tab === "string" ? (tabAliases[sp.tab] ?? sp.tab) : undefined;
   const tab: TabKey = tabs.some((t) => t.key === requested) ? (requested as TabKey) : "zeitplan";
   const activeTab = tabs.find((t) => t.key === tab)!;
   const today = todayIso();
-  const counts = await planningCounts(user, action.id);
   const badge: Partial<Record<TabKey, number>> = {
     zeitplan: counts.slots,
     team: counts.dabei,
