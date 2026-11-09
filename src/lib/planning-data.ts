@@ -267,8 +267,9 @@ export async function copySources(user: OrgUser, action: { id: string; seriesId:
 /** Zähler für die Tab-Leiste */
 export async function planningCounts(user: OrgUser, actionId: string) {
   return withUser(user.id, async (tx) => {
-    const [row] = await tx.execute<{ slots: number; dabei: number; tasks_open: number; feedback: number }>(sql`
+    const [row] = await tx.execute<{ slots: number; dabei: number; tasks_open: number; feedback: number; files: number }>(sql`
       select
+        (select count(*)::int from public.action_files where action_id = ${actionId}) as files,
         (select count(*)::int from public.action_slots where action_id = ${actionId}) as slots,
         (select count(*)::int from public.action_participants where action_id = ${actionId} and status = 'dabei') as dabei,
         (select count(*)::int from public.tasks where action_id = ${actionId} and status = 'offen') as tasks_open,

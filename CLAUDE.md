@@ -15,4 +15,7 @@
 - User-Zugriffe über `withUser()`, privilegierte über `adminDb()` nur nach Prüfung im DAL (`src/lib/auth.ts`).
 
 ## Prüfen vor dem Commit
-- `npm run typecheck`, `npm run lint`, `npm run test:unit`, `npm run test:db` (leere Test-DB), bei Flow-Änderungen `tests/e2e/flow.mjs` → `phase2.mjs` → `phase3.mjs` (frische DB).
+- `npm run typecheck`, `npm run lint`, `npm run test:unit`, `npm run test:db` (leere Test-DB), bei Flow-Änderungen `tests/e2e/flow.mjs` → `phase2.mjs` → `phase3.mjs` → `phase4.mjs` (frische DB, Server mit `JUNA_LOCAL_STORAGE_DIR`).
+
+## Sync aus der Cloud-Session
+- Beim Übertragen per Archiv nie `.git/`, `README.md`, `.gitignore`, `CLAUDE.md` mitpacken.

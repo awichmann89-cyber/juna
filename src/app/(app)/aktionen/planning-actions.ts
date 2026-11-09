@@ -44,6 +44,7 @@ const refresh = (actionId: string) => {
   revalidatePath(`/aktionen/${actionId}`);
   revalidatePath("/aufgaben");
   revalidatePath("/uebersicht");
+  revalidatePath("/leiterrunde", "layout");
 };
 
 // --- Zeitplan ------------------------------------------------------------------

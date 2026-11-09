@@ -9,6 +9,8 @@ import { actionStatus, seriesColors } from "@/db/schema";
 import { requireOrgAdmin, requireOrgUser } from "@/lib/auth";
 import { blocksToText, MAX_NOTES_BYTES, sanitizeBlocks } from "@/lib/notes-text";
 import { shiftPlanning } from "@/lib/planning-shift";
+import { deleteFiles } from "@/lib/storage";
+import { deleteLiveRoom } from "@/lib/liveblocks";
 
 export type ActionFormState = {
   error?: string;
@@ -140,9 +142,20 @@ export async function saveAction(_prev: ActionFormState, formData: FormData): Pr
 export async function deleteAction(formData: FormData) {
   const user = await requireOrgAdmin();
   const id = z.uuid().parse(formData.get("id"));
-  await withUser(user.id, (tx) =>
-    tx.delete(schema.actions).where(and(eq(schema.actions.id, id), eq(schema.actions.orgId, user.org.id))),
-  );
+  const keys = await withUser(user.id, async (tx) => {
+    const files = await tx
+      .select({ key: schema.actionFiles.storageKey })
+      .from(schema.actionFiles)
+      .where(and(eq(schema.actionFiles.actionId, id), eq(schema.actionFiles.orgId, user.org.id)));
+    const deleted = await tx
+      .delete(schema.actions)
+      .where(and(eq(schema.actions.id, id), eq(schema.actions.orgId, user.org.id)))
+      .returning({ id: schema.actions.id });
+    return deleted.length ? files.map((f) => f.key) : [];
+  });
+  // Dateien im Speicher erst nach erfolgreichem Löschen der Aktion entfernen
+  await deleteFiles(keys).catch((e) => console.error("[aktionen:delete] Dateien nicht gelöscht", e));
+  await deleteLiveRoom(user.org.id, "aktion", id);
   revalidatePath("/aktionen", "layout");
   revalidatePath("/uebersicht");
   redirect("/aktionen");
@@ -155,6 +168,7 @@ export type SaveNotesResult =
 /** Autosave des Notiz-Editors mit optimistischer Sperre (Version). */
 export async function saveNotes(actionId: string, blocks: unknown, expectedVersion: number): Promise<SaveNotesResult> {
   const user = await requireOrgUser();
+  const live = expectedVersion === -1;
   if (!z.uuid().safeParse(actionId).success || !Number.isInteger(expectedVersion)) {
     return { ok: false, reason: "invalid", message: "Ungültige Anfrage." };
   }
@@ -175,7 +189,8 @@ export async function saveNotes(actionId: string, blocks: unknown, expectedVersi
         .set({
           notes: clean,
           notesText: blocksToText(clean),
-          notesVersion: expectedVersion + 1,
+          // -1 = Live-Modus (Liveblocks): Schnappschuss des geteilten Dokuments, keine Versionsprüfung
+          notesVersion: live ? sql`${schema.actions.notesVersion} + 1` : expectedVersion + 1,
           notesUpdatedAt: new Date(),
           notesUpdatedBy: user.id,
         })
@@ -183,7 +198,7 @@ export async function saveNotes(actionId: string, blocks: unknown, expectedVersi
           and(
             eq(schema.actions.id, actionId),
             eq(schema.actions.orgId, user.org.id),
-            eq(schema.actions.notesVersion, expectedVersion),
+            live ? undefined : eq(schema.actions.notesVersion, expectedVersion),
           ),
         )
         .returning({ version: schema.actions.notesVersion, savedAt: schema.actions.notesUpdatedAt }),

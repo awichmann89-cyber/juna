@@ -426,4 +426,97 @@ describe.skipIf(!url)("RLS / Mandantentrennung", () => {
       await db.query(`delete from public.actions where id = $1`, [actA]);
     }
   });
+
+  // --- Phase 4: Treffen & Dateien -----------------------------------------
+  // Hinweis: asUser() rollt zurück – dauerhafte Fixtures daher als Owner anlegen.
+  it("Treffen, Agenda, Anwesenheit nur in der eigenen Organisation; Löschen nur Admins", async () => {
+    const actA = "aaaaaaaa-4444-0000-0000-000000000001";
+    const meetingId = "aaaaaaaa-4444-1111-0000-000000000001";
+    await db.query(`insert into public.actions (id, org_id, title, date) values ($1, $2, 'Waffelessen', '2027-02-14')`, [actA, ids.orgA]);
+    await db.query(`insert into public.meetings (id, org_id, title, date) values ($1, $2, 'Monatstreffen Februar', '2027-02-01')`, [meetingId, ids.orgA]);
+    try {
+      // Mitglied darf anlegen/planen (innerhalb einer zurückgerollten Transaktion geprüft)
+      const created = await asUser(ids.memberA, async (c) => {
+        const m = (await c.query(
+          `insert into public.meetings (org_id, title, date, protocol_owner) values ($1, 'Jahresplanung', '2027-01-10', $2) returning id, created_by`,
+          [ids.orgA, ids.memberA],
+        )).rows[0];
+        await c.query(`insert into public.meeting_agenda (org_id, meeting_id, action_id, kind, position) values ($1, $2, $3, 'planung', 0)`, [ids.orgA, m.id, actA]);
+        await c.query(`insert into public.meeting_attendance (org_id, meeting_id, user_id, status) values ($1, $2, $3, 'anwesend')`, [ids.orgA, m.id, ids.adminA]);
+        return (await c.query(`select count(*)::int n from public.meeting_agenda where meeting_id = $1`, [m.id])).rows[0].n === 1 && m.created_by === ids.memberA;
+      });
+      expect(created).toBe(true);
+      await db.query(`insert into public.meeting_agenda (org_id, meeting_id, action_id) values ($1, $2, $3)`, [ids.orgA, meetingId, actA]);
+      await db.query(`insert into public.meeting_attendance (org_id, meeting_id, user_id, status) values ($1, $2, $3, 'anwesend')`, [ids.orgA, meetingId, ids.memberA]);
+
+      const seenByB = await asUser(ids.memberB, async (c) => ({
+        meetings: (await c.query(`select id from public.meetings`)).rows,
+        agenda: (await c.query(`select id from public.meeting_agenda`)).rows,
+        attendance: (await c.query(`select * from public.meeting_attendance`)).rows,
+      }));
+      expect(seenByB).toEqual({ meetings: [], agenda: [], attendance: [] });
+      const seenByA = await asUser(ids.memberA, async (c) => (await c.query(`select id from public.meeting_agenda`)).rows);
+      expect(seenByA).toHaveLength(1);
+
+      // Protokollführer muss zur Organisation gehören
+      await asUser(ids.memberA, async (c) => {
+        await expect(c.query(`update public.meetings set protocol_owner = $2 where id = $1`, [meetingId, ids.memberB])).rejects.toThrow(
+          /foreign key/,
+        );
+      });
+      const byMember = await asUser(ids.memberA, async (c) => (await c.query(`delete from public.meetings where id = $1`, [meetingId])).rowCount);
+      expect(byMember).toBe(0);
+      const byAdmin = await asUser(ids.adminA, async (c) => (await c.query(`delete from public.meetings where id = $1`, [meetingId])).rowCount);
+      expect(byAdmin).toBe(1);
+    } finally {
+      await db.query(`delete from public.meetings where org_id = $1`, [ids.orgA]);
+      await db.query(`delete from public.actions where id = $1`, [actA]);
+    }
+  });
+
+  it("Dateien: Speicherpfad muss zur Org/Aktion passen, Uploader nicht fälschbar, Löschen nur Uploader/Admin", async () => {
+    const actA = "aaaaaaaa-4444-0000-0000-000000000002";
+    const fileId = "aaaaaaaa-4444-2222-0000-000000000001";
+    const key = (org: string, name: string) => `orgs/${org}/actions/${actA}/${name}`;
+    await db.query(`insert into public.actions (id, org_id, title, date) values ($1, $2, 'Ostereiersuche', '2027-03-28')`, [actA, ids.orgA]);
+    await db.query(
+      `insert into public.action_files (id, org_id, action_id, storage_key, filename, content_type, size_bytes, uploaded_by) values ($1, $2, $3, $4, 'plakat.pdf', 'application/pdf', 1000, $5)`,
+      [fileId, ids.orgA, actA, key(ids.orgA, "plakat.pdf"), ids.adminA],
+    );
+    try {
+      const uploaded = await asUser(ids.memberA, async (c) =>
+        (await c.query(
+          `insert into public.action_files (org_id, action_id, storage_key, filename, content_type, size_bytes) values ($1, $2, $3, 'flyer.png', 'image/png', 10) returning uploaded_by`,
+          [ids.orgA, actA, key(ids.orgA, "flyer.png")],
+        )).rows[0].uploaded_by,
+      );
+      expect(uploaded).toBe(ids.memberA);
+      await asUser(ids.memberA, async (c) => {
+        await expect(
+          c.query(
+            `insert into public.action_files (org_id, action_id, storage_key, filename, content_type, size_bytes) values ($1, $2, $3, 'x.pdf', 'application/pdf', 1)`,
+            [ids.orgA, actA, key(ids.orgB, "x.pdf")],
+          ),
+        ).rejects.toThrow(/action_files_key_scope/);
+      });
+      await asUser(ids.memberA, async (c) => {
+        await expectDenied(
+          c.query(
+            `insert into public.action_files (org_id, action_id, storage_key, filename, content_type, size_bytes, uploaded_by) values ($1, $2, $3, 'y.pdf', 'application/pdf', 1, $4)`,
+            [ids.orgA, actA, key(ids.orgA, "y.pdf"), ids.adminA],
+          ),
+        );
+      });
+      const seenByB = await asUser(ids.memberB, async (c) => (await c.query(`select * from public.action_files`)).rows);
+      expect(seenByB).toHaveLength(0);
+      const seenByA = await asUser(ids.memberA, async (c) => (await c.query(`select id from public.action_files`)).rows);
+      expect(seenByA).toHaveLength(1);
+      const deletedByMember = await asUser(ids.memberA, async (c) => (await c.query(`delete from public.action_files where id = $1`, [fileId])).rowCount);
+      expect(deletedByMember).toBe(0);
+      const deletedByAdmin = await asUser(ids.adminA, async (c) => (await c.query(`delete from public.action_files where id = $1`, [fileId])).rowCount);
+      expect(deletedByAdmin).toBe(1);
+    } finally {
+      await db.query(`delete from public.actions where id = $1`, [actA]);
+    }
+  });
 });

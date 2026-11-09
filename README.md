@@ -35,6 +35,16 @@ Der vollständige Projektplan liegt im claude.ai-Projekt „juna“ (`projektpla
 - **Feedback** (lief gut / verbessern / fürs nächste Mal); „Fürs nächste Mal“ erscheint bei der nächsten Durchführung der Reihe als **„Aus dem letzten Mal“** → als Aufgabe übernehmen oder abhaken
 - **Von früherer Durchführung übernehmen**: Zeitplan (aufs neue Datum verschoben), Aufgaben (offen, relativ), Planungsteam, Notizen
 
+## Stand: Phase 4 – Leiterrunde, Dateien, Echtzeit
+
+- **Leiterrunden-Modus** (`/leiterrunde`): Treffen (Monatstreffen, Jahresplanung, Sonstiges) mit Protokollführung
+  - **Agenda-Vorschlag** beim Anlegen: Feedback zu vergangenen Aktionen (90 Tage) ohne Rückmeldung + anstehende Aktionen (Monatstreffen: 8 Wochen, Jahresplanung: 12 Monate + Ideen); Punkte ergänzen (Aktion oder frei), sortieren, abhaken
+  - **Anwesenheit** (anwesend / entschuldigt / fehlt): Protokollführung und Admins erfassen für alle, jede*r ändert die eigene; „Übrige als anwesend“
+  - **Ablauf**: Punkt für Punkt durchklicken, je Aktion Feedback / Team / Aufgaben / Zeitplan / Notizen direkt bearbeiten, „Erledigt & weiter“; Seite aktualisiert sich während des Treffens automatisch
+  - **Protokoll** im selben Editor wie die Notizen
+- **Dateien** pro Aktion (privater Vercel-Blob-Store): Upload bis 50 MB direkt aus dem Browser, Gruppen (z. B. „Plakat“), Bildvorschau, Download nur angemeldet über `/api/dateien/<id>`; Löschen durch Hochladende oder Admins; HTML/SVG sind gesperrt
+- **Gemeinsames Bearbeiten in Echtzeit** (Liveblocks) für Notizen und Protokoll, inkl. Anzeige, wer gerade mitschreibt. Ohne `LIVEBLOCKS_SECRET_KEY` bleibt es beim Autosave mit Konflikterkennung.
+
 ## Einrichtung
 
 ### 1. Neon
@@ -68,12 +78,20 @@ Tipp: Für Preview-Deployments und Tests eigene **Neon-Branches** verwenden (die
 | `NEXT_PUBLIC_SITE_URL` | Basis-URL für Links in Mails |
 | `PLATFORM_ADMIN_EMAIL` | Empfänger neuer Anträge (Standard `apps@alw-mediaworks.de`) |
 | `RESEND_API_KEY`, `MAIL_FROM` | Mailversand; ohne Key werden Mails in der Konsole ausgegeben |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob (privater Store) für den Tab „Dateien“; wird beim Verbinden des Stores gesetzt |
+| `JUNA_LOCAL_STORAGE_DIR` | nur lokal/Tests: Dateien in einem Ordner statt Blob (max. 5 MB) |
+| `LIVEBLOCKS_SECRET_KEY` | Echtzeit-Bearbeitung (Secret Key `sk_…`); optional |
 
-### 3. Resend
+### 3. Vercel Blob und Liveblocks
+
+- **Blob**: Vercel → *Storage* → *Create* → **Blob**, Zugriff **Private**, Region Frankfurt (`fra1`), mit dem Projekt verbinden (setzt `BLOB_READ_WRITE_TOKEN`). Ohne Store ist der Upload deaktiviert.
+- **Liveblocks** (optional): Konto auf liveblocks.io, Projekt anlegen, unter *API keys* den **Secret key** als `LIVEBLOCKS_SECRET_KEY` hinterlegen. Der Raum-Zugang wird von `/api/liveblocks-auth` nur für Aktionen/Treffen der eigenen Organisation ausgegeben. Hinweis: Liveblocks speichert die Live-Dokumente in den USA; juna speichert zusätzlich einen Schnappschuss in Neon.
+
+### 4. Resend
 
 Domain `juna.app` in Resend verifizieren (DNS-Einträge SPF/DKIM), API-Key erzeugen.
 
-### 4. Superadmin anlegen (einmalig)
+### 5. Superadmin anlegen (einmalig)
 
 ```bash
 npm run bootstrap:superadmin -- apps@alw-mediaworks.de "ALW Mediaworks"
@@ -81,7 +99,7 @@ npm run bootstrap:superadmin -- apps@alw-mediaworks.de "ALW Mediaworks"
 
 Das Skript gibt einen Link aus (24 h gültig), über den das Passwort gesetzt wird. Danach ist unter `/admin` die Plattform-Verwaltung erreichbar.
 
-### 5. Lokal entwickeln
+### 6. Lokal entwickeln
 
 ```bash
 npm run dev        # http://localhost:3000
@@ -121,6 +139,7 @@ npm run bootstrap:superadmin -- apps@alw-mediaworks.de     # Link kopieren
 E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/flow.mjs "<Link>"
 E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/phase2.mjs   # danach, gleiche DB
 E2E_BASE_URL=http://localhost:3000 E2E_MAIL_LOG=/tmp/juna.log node tests/e2e/phase3.mjs   # danach, gleiche DB
+DATABASE_URL=... E2E_BASE_URL=http://localhost:3000 node tests/e2e/phase4.mjs   # Server mit JUNA_LOCAL_STORAGE_DIR starten
 ```
 
 ## Sicherheitsprinzipien

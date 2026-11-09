@@ -329,6 +329,73 @@ export const feedbackFollowups = pgTable(
   (t) => [primaryKey({ columns: [t.feedbackId, t.actionId] })],
 );
 
+// --- Phase 4: Treffen & Dateien ----------------------------------------------
+export const meetingType = pgEnum("meeting_type", ["jahresplanung", "monatstreffen", "sonstiges"]);
+export const meetingStatus = pgEnum("meeting_status", ["geplant", "laufend", "abgeschlossen"]);
+export const agendaKind = pgEnum("agenda_kind", ["feedback", "planung", "sonstiges"]);
+export const attendanceStatus = pgEnum("attendance_status", ["anwesend", "entschuldigt", "fehlt"]);
+
+export const meetings = pgTable("meetings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: uuid("org_id").notNull(),
+  type: meetingType("type").notNull().default("monatstreffen"),
+  title: text("title").notNull(),
+  date: date("date", { mode: "string" }).notNull(),
+  startTime: time("start_time"),
+  location: text("location"),
+  status: meetingStatus("status").notNull().default("geplant"),
+  protocolOwner: text("protocol_owner"),
+  notes: jsonb("notes").$type<unknown[]>(),
+  notesText: text("notes_text").notNull().default(""),
+  notesVersion: integer("notes_version").notNull().default(0),
+  notesUpdatedAt: ts("notes_updated_at"),
+  notesUpdatedBy: text("notes_updated_by"),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
+
+export const meetingAgenda = pgTable("meeting_agenda", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: uuid("org_id").notNull(),
+  meetingId: uuid("meeting_id").notNull(),
+  actionId: uuid("action_id"),
+  title: text("title"),
+  kind: agendaKind("kind").notNull().default("planung"),
+  position: integer("position").notNull().default(0),
+  done: boolean("done").notNull().default(false),
+});
+
+export const meetingAttendance = pgTable(
+  "meeting_attendance",
+  {
+    orgId: uuid("org_id").notNull(),
+    meetingId: uuid("meeting_id").notNull(),
+    userId: text("user_id").notNull(),
+    status: attendanceStatus("status").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.meetingId, t.userId] })],
+);
+
+export const actionFiles = pgTable("action_files", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: uuid("org_id").notNull(),
+  actionId: uuid("action_id").notNull(),
+  storageKey: text("storage_key").notNull().unique(),
+  filename: text("filename").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+  groupLabel: text("group_label"),
+  uploadedBy: text("uploaded_by"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export type MeetingType = (typeof meetingType.enumValues)[number];
+export type MeetingStatus = (typeof meetingStatus.enumValues)[number];
+export type AgendaKind = (typeof agendaKind.enumValues)[number];
+export type AttendanceStatus = (typeof attendanceStatus.enumValues)[number];
+
 export type ParticipationStatus = (typeof participationStatus.enumValues)[number];
 export type FeedbackKind = (typeof feedbackKind.enumValues)[number];
 export type TaskStatus = (typeof taskStatus.enumValues)[number];

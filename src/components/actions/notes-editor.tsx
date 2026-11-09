@@ -1,13 +1,14 @@
 "use client";
 
 import "@blocknote/mantine/style.css";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { BlockNoteSchema, defaultBlockSpecs, type PartialBlock } from "@blocknote/core";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { BlockNoteSchema, defaultBlockSpecs, type BlockNoteEditor, type PartialBlock } from "@blocknote/core";
 import { de } from "@blocknote/core/locales";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView, type Theme } from "@blocknote/mantine";
 import { CircleAlert, Check, LoaderCircle } from "lucide-react";
 import { saveNotes } from "@/app/(app)/aktionen/actions";
+import { saveMeetingNotes } from "@/app/(app)/leiterrunde/actions";
 
 // Medien (Bild/Video/Audio/Datei) kommen mit dem Tab „Dateien“ (Phase 4) – bis dahin aus dem Editor entfernt
 const { image: _image, video: _video, audio: _audio, file: _file, ...blockSpecs } = defaultBlockSpecs;
@@ -15,10 +16,10 @@ void _image;
 void _video;
 void _audio;
 void _file;
-const schema = BlockNoteSchema.create({ blockSpecs });
+export const schema = BlockNoteSchema.create({ blockSpecs });
 
 const shared = { borderRadius: 10, fontFamily: "var(--font-nunito), ui-sans-serif, system-ui, sans-serif" };
-const lightTheme: Theme = {
+export const lightTheme: Theme = {
   ...shared,
   colors: {
     editor: { text: "#2b211c", background: "transparent" },
@@ -32,7 +33,7 @@ const lightTheme: Theme = {
     sideMenu: "#b0a198",
   },
 };
-const darkTheme: Theme = {
+export const darkTheme: Theme = {
   ...shared,
   colors: {
     editor: { text: "#f5ede7", background: "transparent" },
@@ -47,7 +48,7 @@ const darkTheme: Theme = {
   },
 };
 
-function useDarkMode() {
+export function useDarkMode() {
   return useSyncExternalStore(
     (cb) => {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -59,31 +60,77 @@ function useDarkMode() {
   );
 }
 
+const SAVE_DELAY_MS = 1200;
+const LIVE_SAVE_DELAY_MS = 2500;
+
 type SaveState = { kind: "saved"; at?: string } | { kind: "dirty" } | { kind: "saving" } | { kind: "error"; message: string } | { kind: "conflict"; message: string };
 
-const SAVE_DELAY_MS = 1200;
-
-export default function NotesEditor({
-  actionId,
-  initialBlocks,
-  initialVersion,
-  lastSavedLabel,
-}: {
-  actionId: string;
+export type NotesEditorProps = {
+  actionId?: string;
+  /** Statt einer Aktion das Protokoll eines Treffens bearbeiten */
+  meetingId?: string;
+  placeholder?: string;
   initialBlocks: unknown[] | null;
   initialVersion: number;
   lastSavedLabel?: string;
-}) {
-  const dark = useDarkMode();
+  /** Gemeinsames Bearbeiten in Echtzeit über Liveblocks */
+  live?: boolean;
+  /** Liveblocks-Raum (nur im Live-Modus) */
+  roomId?: string;
+};
+
+export function editorDictionary(placeholder?: string) {
+  return {
+    ...de,
+    placeholders: { ...de.placeholders, emptyDocument: placeholder ?? "Notizen, Ablauf, Ideen … Tippe „/“ für Blöcke oder nutze Markdown wie # oder -" },
+  };
+}
+
+export function initialContentOf(blocks: unknown[] | null) {
+  return blocks && blocks.length > 0 ? (blocks as PartialBlock<typeof schema.blockSchema>[]) : undefined;
+}
+
+const LiveNotesEditor = lazy(() => import("./live-notes-editor"));
+
+export default function NotesEditor(props: NotesEditorProps) {
+  if (props.live) {
+    return (
+      <Suspense fallback={<div className="min-h-64" />}>
+        <LiveNotesEditor {...props} />
+      </Suspense>
+    );
+  }
+  return <PlainNotesEditor {...props} />;
+}
+
+function PlainNotesEditor(props: NotesEditorProps) {
   const editor = useCreateBlockNote({
     schema,
-    dictionary: {
-      ...de,
-      placeholders: { ...de.placeholders, emptyDocument: "Notizen, Ablauf, Ideen … Tippe „/“ für Blöcke oder nutze Markdown wie # oder -" },
-    },
-    initialContent: initialBlocks && initialBlocks.length > 0 ? (initialBlocks as PartialBlock<typeof schema.blockSchema>[]) : undefined,
+    dictionary: editorDictionary(props.placeholder),
+    initialContent: initialContentOf(props.initialBlocks),
   });
+  return <EditorWithAutosave editor={editor} {...props} />;
+}
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyEditor = BlockNoteEditor<any, any, any>;
+
+/**
+ * Editor-Ansicht mit Autosave.
+ * - Einzelmodus: optimistische Versionierung, Konflikt wird angezeigt
+ * - Live-Modus: das Dokument ist geteilt; jeder Client speichert nur nach eigenen Änderungen einen Schnappschuss (ohne Versionsprüfung)
+ */
+export function EditorWithAutosave({
+  editor,
+  actionId,
+  meetingId,
+  initialVersion,
+  lastSavedLabel,
+  live,
+  children,
+}: NotesEditorProps & { editor: AnyEditor; children?: React.ReactNode }) {
+  const dark = useDarkMode();
+  const delay = live ? LIVE_SAVE_DELAY_MS : SAVE_DELAY_MS;
   const [state, setState] = useState<SaveState>({ kind: "saved" });
   const version = useRef(initialVersion);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -109,7 +156,11 @@ export default function NotesEditor({
       do {
         pending.current = false;
         setState({ kind: "saving" });
-        const result = await saveNotes(actionId, editor.document, version.current).catch(() => ({
+        const expected = live ? -1 : version.current;
+        const result = await (meetingId
+          ? saveMeetingNotes(meetingId, editor.document, expected)
+          : saveNotes(actionId!, editor.document, expected)
+        ).catch(() => ({
           ok: false as const,
           reason: "error" as const,
           message: "Keine Verbindung – wir versuchen es gleich noch einmal.",
@@ -130,7 +181,7 @@ export default function NotesEditor({
     } finally {
       inFlight.current = false;
     }
-  }, [actionId, editor]);
+  }, [actionId, meetingId, editor, live]);
 
   useEffect(() => {
     retryRef.current = () => void flush();
@@ -140,8 +191,14 @@ export default function NotesEditor({
     if (stopped.current) return;
     setState((s) => (s.kind === "saving" ? s : { kind: "dirty" }));
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void flush(), SAVE_DELAY_MS);
-  }, [flush]);
+    timer.current = setTimeout(() => void flush(), delay);
+  }, [flush, delay]);
+
+  // Live: nur lokale Änderungen lösen das Speichern aus (sonst würden alle Clients dasselbe speichern)
+  useEffect(() => {
+    if (!live) return;
+    return editor.onChange(() => schedule(), false);
+  }, [editor, live, schedule]);
 
   // Beim Verlassen/Wechseln der App sofort speichern; Warnung bei ungespeicherten Änderungen
   useEffect(() => {
@@ -165,7 +222,10 @@ export default function NotesEditor({
 
   return (
     <div className="flex flex-col gap-2">
-      <SaveIndicator state={state} lastSavedLabel={lastSavedLabel} />
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">{children}</div>
+        <SaveIndicator state={state} lastSavedLabel={lastSavedLabel} />
+      </div>
       {state.kind === "conflict" && (
         <div role="alert" className="flex flex-col gap-2 rounded-xl bg-warning-soft p-3 text-sm text-warning sm:flex-row sm:items-center">
           <span className="flex-1">{state.message} Deine letzten Änderungen wurden nicht gespeichert.</span>
@@ -179,7 +239,12 @@ export default function NotesEditor({
         </div>
       )}
       <div className="juna-editor -mx-3 min-h-64 rounded-xl sm:-mx-6">
-        <BlockNoteView editor={editor} theme={dark ? darkTheme : lightTheme} onChange={schedule} editable={state.kind !== "conflict"} />
+        <BlockNoteView
+          editor={editor}
+          theme={dark ? darkTheme : lightTheme}
+          onChange={live ? undefined : schedule}
+          editable={state.kind !== "conflict"}
+        />
       </div>
     </div>
   );

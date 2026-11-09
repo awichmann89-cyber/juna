@@ -25,6 +25,10 @@ import { EmptyState } from "@/components/ui/feedback";
 import { formatActionDate, formatActionTime, todayIso } from "@/lib/action-format";
 import { getAction, seriesHistory, type ActionDetail } from "@/lib/actions-data";
 import { CopyPanelBox } from "@/components/planning/copy-panel";
+import { FilesTab } from "@/components/files/files-tab";
+import { actionFiles } from "@/lib/files-data";
+import { clientUploadAvailable, storageMode } from "@/lib/storage";
+import { liveblocksEnabled, roomIdFor } from "@/lib/liveblocks";
 import { FeedbackTab } from "@/components/planning/feedback-tab";
 import { LastTime } from "@/components/planning/last-time";
 import { ScheduleTab } from "@/components/planning/schedule-tab";
@@ -50,7 +54,7 @@ const tabs = [
   { key: "team", label: "Team", icon: Users },
   { key: "aufgaben", label: "Aufgaben", icon: ListChecks },
   { key: "feedback", label: "Feedback", icon: MessageSquareHeart },
-  { key: "dateien", label: "Dateien", icon: FolderOpen, phase: "Phase 4: Plakate und andere Dateien" },
+  { key: "dateien", label: "Dateien", icon: FolderOpen },
   { key: "historie", label: "Historie", icon: History, mobileOnly: true },
 ] as const;
 type TabKey = (typeof tabs)[number]["key"];
@@ -128,11 +132,13 @@ async function ActionPage({
     team: counts.dabei,
     aufgaben: counts.tasks_open,
     feedback: counts.feedback,
+    dateien: counts.files,
   };
 
   let tabContent: React.ReactNode;
   if (tab === "notizen") {
     const [lastTime, sources] = await Promise.all([lastTimeItems(user, action), copySources(user, action)]);
+    const live = liveblocksEnabled();
     const isEmpty = counts.slots === 0 && counts.tasks_open === 0 && !action.notesText;
     tabContent = (
       <>
@@ -154,8 +160,10 @@ async function ActionPage({
         <Card>
           <CardContent className="pt-4">
             <NotesEditorLoader
-              key={`${action.id}:${action.notesVersion}`}
+              key={live ? action.id : `${action.id}:${action.notesVersion}`}
               actionId={action.id}
+              live={live}
+              roomId={live ? roomIdFor(user.org.id, "aktion", action.id) : undefined}
               initialBlocks={action.notes}
               initialVersion={action.notesVersion}
               lastSavedLabel={
@@ -181,14 +189,20 @@ async function ActionPage({
     tabContent = <TasksTab action={action} tasks={tasks} members={members} today={today} />;
   } else if (tab === "feedback") {
     tabContent = <FeedbackTab user={user} action={action} items={await actionFeedback(user, action.id)} />;
+  } else if (tab === "dateien") {
+    const mode = storageMode();
+    tabContent = (
+      <FilesTab
+        user={user}
+        actionId={action.id}
+        files={await actionFiles(user, action.id)}
+        mode={mode === "blob" ? (clientUploadAvailable() ? "client" : "server") : mode === "local" ? "server" : "none"}
+      />
+    );
   } else if (tab === "historie") {
     tabContent = <SeriesHistory user={user} action={action} />;
   } else {
-    tabContent = (
-      <EmptyState icon={<activeTab.icon className="size-6" />} title={`${activeTab.label} – kommt bald`}>
-        {"phase" in activeTab ? activeTab.phase : null}
-      </EmptyState>
-    );
+    tabContent = <EmptyState icon={<activeTab.icon className="size-6" />} title={activeTab.label} />;
   }
 
   return (
